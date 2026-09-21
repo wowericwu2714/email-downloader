@@ -1,0 +1,47 @@
+# [project]
+# name = "email-downloader"
+# version = "0.1.0"
+# description = "Add your description here"
+# readme = "README.md"
+# requires-python = ">=3.13"
+# dependencies = []
+
+
+[project]
+name = "email-downloader"
+version = "0.1.0"
+description = "Reusable Outlook Desktop mail search and attachment downloader"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "pywin32>=306 ; sys_platform == 'win32'",
+]
+
+[dependency-groups]
+dev = [
+    "mypy>=1.11",
+    "pytest>=8.3",
+    "pytest-cov>=5.0",
+    "ruff>=0.7",
+]
+
+
+[build-system]
+requires = ["uv_build>=0.12.17,<0.13"]
+build-backend = "uv_build"
+
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "outlook_integration: requires Windows and a configured Outlook profile",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+packages = ["email_downloader"]
