@@ -45,3 +45,6 @@ target-version = "py311"
 python_version = "3.11"
 strict = true
 packages = ["email_downloader"]
+
+[tool.ruff.lint]
+ignore = ["DTZ001"]
