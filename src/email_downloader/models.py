@@ -74,12 +74,14 @@ class MailQuery:
                     f"{exact_field} and {contains_field} cannot be used simultaneously"
                 )
 
-        # 副檔名轉成小寫、補上句點並去除重複
-        normalized_extensions = tuple(
-            dict.fromkeys(
-                f".{extension.strip().lstrip('.').lower()}"
-                for extension in self.attachment_extensions
-            )
-        )
+        object.__setattr__(self, "attachment_extensions", normalize_extensions(self.attachment_extensions))
 
-        object.__setattr__(self, "attachment_extensions", normalized_extensions,)
+
+def normalize_extensions(extensions: tuple[str, ...]) -> tuple[str, ...]:
+    """Normalize attachment extensions to lowercase, leading-dot form, deduped."""
+    return tuple(
+        dict.fromkeys(
+            f".{ext.strip().lstrip('.').casefold()}"
+            for ext in extensions
+        )
+    )
