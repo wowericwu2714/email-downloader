@@ -212,6 +212,7 @@ dev = [
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "ruff" },
+    { name = "types-pywin32" },
 ]
 
 [package.metadata]
@@ -223,6 +224,7 @@ dev = [
     { name = "pytest", specifier = ">=8.3" },
     { name = "pytest-cov", specifier = ">=5.0" },
     { name = "ruff", specifier = ">=0.7" },
+    { name = "types-pywin32", specifier = ">=312.0.0.20260827" },
 ]
 
 [[package]]
@@ -584,6 +586,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/12/64/da524626d3b9cc40c168a13da8335fe1c51be12c0a63685cc6db7308daae/tomli-2.4.1-cp314-cp314t-win_amd64.whl", hash = "sha256:2c1c351919aca02858f740c6d33adea0c5deea37f9ecca1cc1ef9e884a619d26", size = 121196, upload-time = "2026-03-25T20:22:01.169Z" },
     { url = "https://files.pythonhosted.org/packages/5a/cd/e80b62269fc78fc36c9af5a6b89c835baa8af28ff5ad28c7028d60860320/tomli-2.4.1-cp314-cp314t-win_arm64.whl", hash = "sha256:eab21f45c7f66c13f2a9e0e1535309cee140182a9cdae1e041d02e47291e8396", size = 100393, upload-time = "2026-03-25T20:22:02.137Z" },
     { url = "https://files.pythonhosted.org/packages/7b/61/cceae43728b7de99d9b847560c262873a1f6c98202171fd5ed62640b494b/tomli-2.4.1-py3-none-any.whl", hash = "sha256:0d85819802132122da43cb86656f8d1f8c6587d54ae7dcaf30e90533028b49fe", size = 14583, upload-time = "2026-03-25T20:22:03.012Z" },
+]
+
+[[package]]
+name = "types-pywin32"
+version = "312.0.0.20260827"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/d2/ba/de660e0aa3dcde61b2cada38c79fdaafcaaf2a7c811512fbe577d03c7245/types_pywin32-312.0.0.20260827.tar.gz", hash = "sha256:348facaabb9b3dfbeec50399ef430b660f7454529acf4c7e24874019cb721d58", size = 357427, upload-time = "2026-08-27T12:07:04.192Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/81/53/9c90587245adee3a73af4b8c5374dcfb1f3f0d710d1ab139dfe35dd7258e/types_pywin32-312.0.0.20260827-py3-none-any.whl", hash = "sha256:f22580e0d59c9cea33cf172396a7fb2f19a934c3eb82370bb74ca98f8e3db71e", size = 419299, upload-time = "2026-08-27T12:07:03.081Z" },
 ]
 
 [[package]]
