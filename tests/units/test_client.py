@@ -1,15 +1,12 @@
 from contextlib import contextmanager
+from datetime import datetime
 from typing import Any
 
 import pytest
 
-from datetime import datetime
-
-from email_downloader.models import MailQuery
 import email_downloader.client as client_module
-
 from email_downloader.client import OutlookClient
-from email_downloader.models import MailMessage
+from email_downloader.models import MailMessage, MailQuery
 
 
 class FakeItems:

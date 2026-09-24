@@ -1,4 +1,3 @@
-from itertools import count
 from pathlib import Path, PureWindowsPath
 
 from email_downloader.exceptions import AttachmentConflictError
