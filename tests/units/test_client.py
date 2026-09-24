@@ -1,12 +1,20 @@
 from contextlib import contextmanager
 from datetime import datetime
+from pathlib import Path
 from typing import Any
+from unittest.mock import Mock
 
 import pytest
 
 import email_downloader.client as client_module
 from email_downloader.client import OutlookClient
-from email_downloader.models import MailMessage, MailQuery
+from email_downloader.exceptions import (
+    AttachmentNotFoundError,
+    AttachmentSaveError,
+    MailAccessError,
+    MailNotFoundError,
+)
+from email_downloader.models import AttachmentInfo, MailMessage, MailQuery
 
 
 class FakeItems:
@@ -386,3 +394,429 @@ def test_find_latest_returns_none_when_no_message_matches(
     )
 
     assert result is None
+
+
+def test_download_attachments_returns_saved_paths(
+    tmp_path: Path,
+) -> None:
+    fake_attachment = Mock()
+    fake_attachment.FileName = "每日庫存.xlsx"
+
+    fake_attachments = Mock()
+    fake_attachments.Item.return_value = fake_attachment
+
+    fake_mail_item = Mock()
+    fake_mail_item.Attachments = fake_attachments
+
+
+    namespace = Mock()
+    namespace.GetItemFromID.return_value = fake_mail_item
+
+    session_factory = Mock()
+    session_factory.session.return_value.__enter__ = Mock(return_value=namespace)
+    session_factory.session.return_value.__exit__ = Mock(return_value=False)
+
+    message = MailMessage(
+        entry_id="entry-001",
+        store_id="store-001",
+        subject="每日庫存",
+        sender_name="Warehouse",
+        sender_email="warehouse@example.com",
+        received_time=__import__("datetime").datetime(2026, 9, 24, 8, 0),
+        unread=False,
+        attachments=(
+            AttachmentInfo(
+                index=1,
+                filename="每日庫存.xlsx",
+                extension=".xlsx",
+            ),
+        ),
+    )
+
+    client = OutlookClient(session_factory=session_factory)
+
+    paths = client.download_attachments(
+        message,
+        output_dir=tmp_path,
+        extensions=(".xlsx",),
+        conflict="error",
+    )
+
+    expected = tmp_path / "每日庫存.xlsx"
+    
+    assert paths == [expected]
+    namespace.GetItemFromID.assert_called_once_with(
+        message.entry_id,
+        message.store_id,
+    )
+
+    fake_attachments.Item.assert_called_once_with(1)
+    fake_attachment.SaveAsFile.assert_called_once_with(
+        str(expected.resolve())
+    )
+
+def test_download_attachments_translates_get_item_failure(
+    tmp_path: Path,
+) -> None:
+    namespace = Mock()
+    namespace.GetItemFromID.side_effect = RuntimeError("mail moved")
+
+    session_factory = Mock()
+    session_factory.session.return_value.__enter__ = Mock(return_value=namespace)
+    session_factory.session.return_value.__exit__ = Mock(return_value=False)
+
+    message = MailMessage(
+        entry_id="entry-001",
+        store_id="store-001",
+        subject="每日庫存",
+        sender_name="Warehouse",
+        sender_email="warehouse@example.com",
+        received_time=datetime(2026, 9, 24, 8, 0),
+        unread=False,
+        attachments=(
+            AttachmentInfo(1, "每日庫存.xlsx", ".xlsx"),
+        ),
+    )
+
+    client = OutlookClient(session_factory=session_factory)
+
+    with pytest.raises(MailAccessError):
+        client.download_attachments(
+            message,
+            output_dir=tmp_path,
+            extensions=(".xlsx",),
+        )
+
+def test_download_attachments_raises_when_no_attachment_matches(
+    tmp_path: Path,
+) -> None:
+    session_factory = Mock()
+    client = OutlookClient(session_factory=session_factory)
+
+    message = MailMessage(
+        entry_id="entry-001",
+        store_id="store-001",
+        subject="每日庫存",
+        sender_name="Warehouse",
+        sender_email="warehouse@example.com",
+        received_time=datetime(2026, 9, 24, 8, 0),
+        unread=False,
+        attachments=(
+            AttachmentInfo(1, "每日庫存.pdf", ".pdf"),
+        ),
+    )
+
+    with pytest.raises(AttachmentNotFoundError):
+        client.download_attachments(
+            message,
+            output_dir=tmp_path,
+            extensions=(".xlsx",),
+        )
+
+def test_download_attachments_translates_save_failure(
+    tmp_path: Path,
+) -> None:
+    fake_attachment = Mock()
+    fake_attachment.FileName = "每日庫存.xlsx"
+    fake_attachment.SaveAsFile.side_effect = RuntimeError("save failed")
+
+    fake_attachments = Mock()
+    fake_attachments.Item.return_value = fake_attachment
+
+    fake_mail_item = Mock()
+    fake_mail_item.Attachments = fake_attachments
+
+    namespace = Mock()
+    namespace.GetItemFromID.return_value = fake_mail_item
+
+    session_factory = Mock()
+    session_factory.session.return_value.__enter__ = Mock(return_value=namespace)
+    session_factory.session.return_value.__exit__ = Mock(return_value=False)
+
+
+    message = MailMessage(
+        entry_id="entry-001",
+        store_id="store-001",
+        subject="每日庫存",
+        sender_name="Warehouse",
+        sender_email="warehouse@example.com",
+        received_time=datetime(2026, 9, 24, 8, 0),
+        unread=False,
+        attachments=(
+            AttachmentInfo(1, "每日庫存.xlsx", ".xlsx"),
+        ),
+    )
+
+    client = OutlookClient(session_factory=session_factory)
+
+    with pytest.raises(AttachmentSaveError, match="每日庫存.xlsx"):
+        client.download_attachments(
+            message,
+            output_dir=tmp_path,
+            extensions=(".xlsx",),
+        )
+
+
+def test_download_attachments_saves_remaining_when_one_fails(
+    tmp_path: Path,
+) -> None:
+    fake_attachment_ok = Mock()
+    fake_attachment_ok.FileName = "每日庫存.xlsx"
+
+    fake_attachment_fail = Mock()
+    fake_attachment_fail.FileName = "備註.pdf"
+    fake_attachment_fail.SaveAsFile.side_effect = RuntimeError("disk full")
+
+    fake_attachments = Mock()
+    fake_attachments.Item.side_effect = lambda index: {
+        1: fake_attachment_ok,
+        2: fake_attachment_fail,
+    }[index]
+
+    fake_mail_item = Mock()
+    fake_mail_item.Attachments = fake_attachments
+
+    namespace = Mock()
+    namespace.GetItemFromID.return_value = fake_mail_item
+
+    session_factory = Mock()
+    session_factory.session.return_value.__enter__ = Mock(return_value=namespace)
+    session_factory.session.return_value.__exit__ = Mock(return_value=False)
+
+    message = MailMessage(
+        entry_id="entry-001",
+        store_id="store-001",
+        subject="每日庫存",
+        sender_name="Warehouse",
+        sender_email="warehouse@example.com",
+        received_time=datetime(2026, 9, 24, 8, 0),
+        unread=False,
+        attachments=(
+            AttachmentInfo(index=1, filename="每日庫存.xlsx", extension=".xlsx"),
+            AttachmentInfo(index=2, filename="備註.pdf", extension=".pdf"),
+        ),
+    )
+
+    client = OutlookClient(session_factory=session_factory)
+
+    with pytest.raises(AttachmentSaveError, match="備註.pdf") as exc_info:
+        client.download_attachments(
+            message,
+            output_dir=tmp_path,
+        )
+
+    assert "每日庫存.xlsx" in str(exc_info.value)
+
+    fake_attachment_ok.SaveAsFile.assert_called_once_with(
+        str((tmp_path / "每日庫存.xlsx").resolve())
+    )
+    fake_attachment_fail.SaveAsFile.assert_called_once()
+
+
+def test_download_attachments_skip_all_returns_empty_list(
+    tmp_path: Path,
+) -> None:    
+
+    existing = tmp_path / "每日庫存.xlsx"
+    existing.touch()
+
+    fake_attachment = Mock()
+    fake_attachment.FileName = "每日庫存.xlsx"
+
+    fake_attachments = Mock()
+    fake_attachments.Item.return_value = fake_attachment
+
+    fake_mail_item = Mock()
+    fake_mail_item.Attachments = fake_attachments
+
+    namespace = Mock()
+    namespace.GetItemFromID.return_value = fake_mail_item
+
+    session_factory = Mock()
+    session_factory.session.return_value.__enter__ = Mock(return_value=namespace)
+    session_factory.session.return_value.__exit__ = Mock(return_value=False)
+
+    message = MailMessage(
+        entry_id="entry-001",
+        store_id="store-001",
+        subject="每日庫存",
+        sender_name="Warehouse",
+        sender_email="warehouse@example.com",
+        received_time=datetime(2026, 9, 24, 8, 0),
+        unread=False,
+        attachments=(
+            AttachmentInfo(1, "每日庫存.xlsx", ".xlsx"),
+        ),
+    )
+
+    client = OutlookClient(session_factory=session_factory)
+
+    paths = client.download_attachments(
+        message,
+        output_dir=tmp_path,
+        extensions=(".xlsx",),
+        conflict="skip",
+    )
+
+    assert paths == []
+    fake_attachment.SaveAsFile.assert_not_called()
+
+
+def test_download_attachments_raises_when_attachment_changed(
+    tmp_path: Path,
+) -> None:
+    fake_attachment = Mock()
+    fake_attachment.FileName = "錯誤檔案.xlsx"
+
+    fake_attachments = Mock()
+    fake_attachments.Item.return_value = fake_attachment
+
+    fake_mail_item = Mock()
+    fake_mail_item.Attachments = fake_attachments
+
+    namespace = Mock()
+    namespace.GetItemFromID.return_value = fake_mail_item
+
+    session_factory = Mock()
+    session_factory.session.return_value.__enter__ = Mock(return_value=namespace)
+    session_factory.session.return_value.__exit__ = Mock(return_value=False)
+
+
+    message = MailMessage(
+        entry_id="entry-001",
+        store_id="store-001",
+        subject="每日庫存",
+        sender_name="Warehouse",
+        sender_email="warehouse@example.com",
+        received_time=datetime(2026, 9, 24, 8, 0),
+        unread=False,
+        attachments=(
+            AttachmentInfo(
+                index=1,
+                filename="每日庫存.xlsx",
+                extension=".xlsx",
+            ),
+        ),
+    )
+
+    client = OutlookClient(session_factory=session_factory)
+
+    with pytest.raises(MailAccessError, match="每日庫存.xlsx"):
+        client.download_attachments(
+            message,
+            output_dir=tmp_path,
+            extensions=(".xlsx",),
+        )
+
+    fake_attachment.SaveAsFile.assert_not_called()
+
+
+def test_download_attachments_raises_when_attachment_missing(
+      tmp_path: Path,
+  ) -> None:
+    fake_attachments = Mock()
+    fake_attachments.Item.side_effect = RuntimeError("attachment index out of range")
+
+    fake_mail_item = Mock()
+    fake_mail_item.Attachments = fake_attachments
+
+    namespace = Mock()
+    namespace.GetItemFromID.return_value = fake_mail_item
+
+    session_factory = Mock()
+    session_factory.session.return_value.__enter__ = Mock(return_value=namespace)
+    session_factory.session.return_value.__exit__ = Mock(return_value=False)
+
+    message = MailMessage(
+        entry_id="entry-001",
+        store_id="store-001",
+        subject="每日庫存",
+        sender_name="Warehouse",
+        sender_email="warehouse@example.com",
+        received_time=datetime(2026, 9, 24, 8, 0),
+        unread=False,
+        attachments=(
+            AttachmentInfo(
+                index=1,
+                filename="每日庫存.xlsx",
+                extension=".xlsx",
+            ),
+        ),
+    )
+
+    client = OutlookClient(session_factory=session_factory)
+
+    with pytest.raises(MailAccessError, match="index 1"):
+        client.download_attachments(
+            message,
+            output_dir=tmp_path,
+            extensions=(".xlsx",),
+        )
+
+    fake_attachments.Item.assert_called_once_with(1)
+    
+
+def test_download_latest_raises_when_no_message_matches(
+    tmp_path: Path,
+) -> None:
+    client = OutlookClient()
+
+    client.find_latest = Mock(return_value=None)
+
+    with pytest.raises(MailNotFoundError):
+        client.download_latest(
+            MailQuery(subject_contains="每日庫存"),
+            output_dir=tmp_path,
+        )
+
+def test_download_latest_downloads_matching_message(
+    tmp_path: Path,
+) -> None:
+
+    message = MailMessage(
+        entry_id="entry-001",
+        store_id="store-001",
+        subject="每日庫存",
+        sender_name="Warehouse",
+        sender_email="warehouse@example.com",
+        received_time=datetime(2026, 9, 24, 8, 0),
+        unread=False,
+        attachments=(
+            AttachmentInfo(
+                index=1,
+                filename="每日庫存.xlsx",
+                extension=".xlsx",
+            ),
+        ),
+    )
+
+    query = MailQuery(
+        subject_contains="每日庫存",
+        attachment_name_contains="庫存",
+        attachment_extensions=(".xlsx",),
+    )
+
+    client = OutlookClient()
+
+    client.find_latest = Mock(return_value=message)
+    client.download_attachments = Mock(return_value=[tmp_path / "每日庫存.xlsx"])
+
+
+    result = client.download_latest(
+        query,
+        output_dir=tmp_path,
+        conflict="rename",
+    )
+
+    assert result == [tmp_path / "每日庫存.xlsx"]
+
+    client.find_latest.assert_called_once_with(query)
+
+    client.download_attachments.assert_called_once_with(
+        message,
+        tmp_path,
+        extensions=query.attachment_extensions,
+        filename=query.attachment_name,
+        filename_contains=query.attachment_name_contains,
+        conflict="rename",
+    )
