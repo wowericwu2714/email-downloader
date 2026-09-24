@@ -1,4 +1,5 @@
-from pathlib import Path
+from itertools import count
+from pathlib import Path, PureWindowsPath
 
 from email_downloader.exceptions import AttachmentConflictError
 from email_downloader.models import AttachmentInfo, normalize_extensions
@@ -54,11 +55,18 @@ def resolve_destination(
         )
 
     if conflict == "rename":
+
+        suffix = "".join(destination.suffixes)
+
+        if suffix:
+            stem = destination.name.removesuffix(suffix)
+        else:
+            stem = destination.name
         counter = 1
 
         while True:
             candidate = destination.with_name(
-                f"{destination.stem}_{counter}{destination.suffix}"
+                f"{stem}_{counter}{suffix}"
             )
 
             if not candidate.exists():
@@ -66,3 +74,12 @@ def resolve_destination(
 
             counter += 1
     raise ValueError(f"Unknown conflict policy: {conflict}")
+
+def safe_attachment_name(filename: str) -> str:
+    """Return a safe basename for an Outlook attachment filename."""
+    safe_name = PureWindowsPath(filename).name
+
+    if safe_name in ("", ".", ".."):
+        raise ValueError(f"Invalid attachment filename: {filename}")
+
+    return safe_name
