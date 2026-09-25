@@ -23,7 +23,7 @@
 - 所有副檔名比較不分大小寫，且統一為含前導點的形式，例如 `.xlsx`。
 - 所有 exact／contains 字串比對預設不分大小寫；前後空白保留，除非欄位驗證明確正規化。
 - v1 的 `received_after`／`received_before` 接受 Outlook 本機時間的 naive `datetime`；傳入 timezone-aware `datetime` 時丟出 `ValueError`，避免無聲時區偏移。
-- v1 不支援遞迴搜尋所有子資料夾，也不支援寫信、回信、搬移、刪除或改成已讀。
+- v1 原本不支援遞迴搜尋所有子資料夾；此限制已由 Task 12（`MailQuery.recursive`）解除，詳見該 Task。v1 仍不支援寫信、回信、搬移、刪除或改成已讀。
 - 所有公開 API 都要有 type hints 與 docstring。
 - 採 TDD：每個功能先有失敗測試，再寫最小實作，再跑完整測試。
 
@@ -1078,6 +1078,68 @@ git log --oneline --decorate -5
 ```
 
 Expected: worktree 乾淨，tag 指向所有驗證通過的 commit。
+
+---
+
+### Task 12: 支援 `MailQuery.recursive` 遞迴子資料夾搜尋
+
+> v1 完成（Task 1–11）後追加的能力。背景：呼叫端搜尋範圍設在「收件匣」，但信件實際會落在哪個子資料夾不確定、且結構會變動，無法用固定資料夾清單在呼叫端逐一搜尋解決。由於呼叫端拿到的只有純 Python 的 `MailMessage`，完全接觸不到 COM object，遞迴走訪資料夾樹的能力只能由這個 package 提供，不能留給呼叫端自行用 `pywin32` 兜。
+
+**Files:**
+- Modify: `src/email_downloader/models.py`
+- Modify: `src/email_downloader/folders.py`
+- Modify: `src/email_downloader/client.py`
+- Modify: `tests/units/test_folders.py`
+- Modify: `tests/units/test_client.py`
+- Modify: `README.md`
+- Modify: `docs/progress.md`
+
+**Interfaces:**
+- Consumes: 既有 `resolve_folder()`、COM 資料夾的 `Folders` collection。
+- Produces: `MailQuery.recursive: bool = False`；`folders.iter_folder_tree(folder: Any) -> Iterator[Any]`；`search()`／`find_latest()`／`download_latest()` 在 `recursive=True` 時搜尋 `query.folder` 底下所有層級的子資料夾（不限深度）。
+
+**設計要點：**
+
+- `recursive` 預設 `False`，維持現有單一資料夾行為完全不變，屬於選擇性加入的能力。
+- `query.folder` 是遞迴搜尋的**起點**；`iter_folder_tree()` 以 DFS 走訪該資料夾自己與底下所有層級的子資料夾，不限深度。
+- `recursive=False`：邏輯不變，維持「蒐集到 `limit` 筆即提早中斷」的效能優化（單一資料夾已用 `Items.Sort()` 由新到舊排序，提早中斷是安全的）。
+- `recursive=True`：**不可提早中斷**——必須先搜完 `query.folder` 底下所有子資料夾、蒐集全部符合條件的信件，再依 `received_time` 做一次全域排序，最後才依 `limit` 截斷。原因是在還沒搜完所有資料夾前，無法確定哪一封信是全域最新的。
+- 錯誤處理：遞迴過程中若某個子資料夾本身存取失敗（例如權限問題），比照 Task 6 review「跳過讀不到的單一信件」的既有原則——跳過該子資料夾（記 log）、繼續搜其他資料夾，不讓整個 `search()` 失敗。只有 `query.folder` 這個根路徑本身不存在時，才維持原本的 `FolderNotFoundError`。
+- `find_latest()`／`download_latest()` 不需要另外改介面：它們本來就是直接把 `query` 傳下去，`recursive` 會自動一路帶過去。
+
+- [ ] **Step 1: 寫入 `iter_folder_tree()` 的多層 fake `.Folders` 測試**
+
+驗證走訪順序涵蓋根資料夾自己與所有層級的子資料夾（例如根下有兩個子資料夾，其中一個底下還有孫層資料夾）。
+
+- [ ] **Step 2: 實作 `iter_folder_tree()`**
+
+```python
+def iter_folder_tree(folder: Any) -> Iterator[Any]:
+    yield folder
+    for sub in folder.Folders:
+        yield from iter_folder_tree(sub)
+```
+
+- [ ] **Step 3: 寫入 `search(recursive=True)` 的多資料夾 fake 測試**
+
+至少涵蓋：
+
+- 兩個子資料夾各自命中信件時，結果依 `received_time` 全域排序、正確合併。
+- `limit` 在全域排序「之後」才截斷，不會漏掉排序較後被搜到、但實際時間較新的信件。
+- 某個子資料夾的 `.Items` 存取拋例外時，該資料夾被跳過，其餘資料夾結果不受影響。
+- `recursive=False`（預設）的既有行為與提早中斷優化不受影響（迴歸測試）。
+
+- [ ] **Step 4: 實作 `client.py` 的 `recursive` 分支邏輯**
+
+- [ ] **Step 5: 跑測試、更新 README 與 `docs/progress.md`、提交**
+
+```powershell
+uv run pytest tests/units -v
+uv run ruff check .
+uv run mypy src
+git add src/email_downloader/models.py src/email_downloader/folders.py src/email_downloader/client.py tests/units/test_folders.py tests/units/test_client.py README.md docs/progress.md
+git commit -m "feat: support recursive subfolder search"
+```
 
 ---
 
