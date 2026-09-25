@@ -1,3 +1,4 @@
+from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
@@ -30,7 +31,7 @@ class FakeItems:
     def Sort(self, property_name: str, descending: bool) -> None:
         self.sort_calls.append((property_name, descending))
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[Any]:
         return iter(self._items)
 
 
@@ -44,7 +45,7 @@ class FakeSessionFactory:
         self.namespace = namespace
 
     @contextmanager
-    def session(self):
+    def session(self) -> Iterator[object]:
         yield self.namespace
 
 
@@ -761,7 +762,7 @@ def test_download_latest_raises_when_no_message_matches(
 ) -> None:
     client = OutlookClient()
 
-    client.find_latest = Mock(return_value=None)
+    client.find_latest = Mock(return_value=None)     # type: ignore[method-assign]
 
     with pytest.raises(MailNotFoundError):
         client.download_latest(
@@ -798,8 +799,8 @@ def test_download_latest_downloads_matching_message(
 
     client = OutlookClient()
 
-    client.find_latest = Mock(return_value=message)
-    client.download_attachments = Mock(return_value=[tmp_path / "每日庫存.xlsx"])
+    client.find_latest = Mock(return_value=message)     # type: ignore[method-assign]
+    client.download_attachments = Mock(return_value=[tmp_path / "每日庫存.xlsx"])     # type: ignore[method-assign]
 
 
     result = client.download_latest(

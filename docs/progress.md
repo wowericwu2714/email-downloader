@@ -10,7 +10,7 @@
 - [x] Task 6: 實作 `search()` 與 `find_latest()`（`client.py`，已合併至 main）
 - [x] Task 7: 實作附件篩選與同名檔策略（`attachments.py`，已合併至 main）
 - [x] Task 8: 實作附件下載與 `download_latest()`（`client.py` 的 `download_attachments`／`download_latest`，分支 `feature/task8_attachment-download`，review 修正尚未 commit）
-- [ ] Task 9: 穩定 public exports、logging 與使用文件
+- [x] Task 9: 穩定 public exports、logging 與使用文件（分支 `feature/task9_public-api`，commit `3450914`）
 - [ ] Task 10: 在真實 Windows Outlook 執行 opt-in smoke test
 - [ ] Task 11: 完整驗證、建立 wheel 與跨專案試裝
 
@@ -72,9 +72,23 @@
 
 `ComSessionFactory` Protocol 現在由 `OutlookClient.__init__` 使用，不再是死代碼。
 
-## 最後驗證狀態（2026-09-25，Task 8 review 修正完成，尚未 commit）
+## Task 9 完成內容（分支 `feature/task9_public-api`，commit `3450914`）
 
-- `uv run pytest tests/units -v`：67 passed
+- **Public exports**：`src/email_downloader/__init__.py` 只匯出 plan 指定的穩定介面（`OutlookClient`、`MailQuery`、`MailMessage`、`AttachmentInfo`、例外 hierarchy），`Pywin32SessionFactory`、folder resolver、filter builder、COM constants 皆未匯出。`tests/units/test_public_api.py` 驗證這組 import 介面。
+- **Logging**：`client.py`、`com_backend.py` 都改用 `logger = logging.getLogger(__name__)`，未呼叫 `logging.basicConfig()`，不記錄信件本文。
+  - `DEBUG`：`search()` 的 query 摘要、Restrict filter 內容、命中數；`get_sender_email()` 的 Exchange SMTP fallback。
+  - `INFO`：`download_attachments()` 附件成功下載、因同名檔衝突被 skip。
+  - 順手修正一個小 bug：`download_attachments()` 迴圈中 `SaveAsFile()` 失敗後原本沒有 `continue`，會把存檔失敗的路徑也塞進回傳的 `paths`；補上 `continue` 後 `paths` 只會包含真正存檔成功的路徑，與 `AttachmentSaveError` 訊息裡列出的「已成功路徑」一致。
+- **README**：從空檔案補齊完整內容——前置條件、三種 `uv add` 安裝方式（editable／git／registry）、`search()`／`find_latest()`／`download_attachments()`／`download_latest()` 範例、四種 conflict policy 行為表、例外處理範例（含 `MailNotFoundError` 對應「今日尚未收到資料」的業務情境）、package 與呼叫端的責任邊界、worker thread COM lifecycle 已由 package 內部處理的說明。
+- **mypy strict 補洞（`uv run mypy tests`）**：先前 `[tool.mypy]` 只設定 `packages = ["email_downloader"]`（只查 `src`），這次額外把 `tests/` 也跑過 mypy strict，修正 10 個既有錯誤（非本次 diff 新增，屬於之前 commit 留下的技術債）：
+  - `test_model.py`：`MailQuery(attachment_extensions=[...])` 傳 `list` 改成 `tuple`，符合欄位型別。
+  - `test_com_backend.py`：動態組 fake `pythoncom`／`win32com` module 並賦值屬性的 4 處，加 `# type: ignore[attr-defined]`（mypy 官方對這種動態 module fake 手法的建議寫法）。
+  - `test_client.py`：`FakeItems.__iter__`、`FakeSessionFactory.session` 補上回傳型別註解（`Iterator[Any]`／`Iterator[object]`）；3 處直接對 instance method 賦值做 mock（`client.find_latest = Mock(...)` 等）加 `# type: ignore[method-assign]`。
+
+## 最後驗證狀態（2026-09-25，Task 9 完成並已 commit）
+
+- `uv run pytest tests/units -v`：68 passed
 - `uv run ruff check .`：All checks passed
 - `uv run mypy src`：Success（9 source files）
-- 待 commit 檔案：`src/email_downloader/client.py`、`tests/units/test_client.py`
+- `uv run mypy tests`：Success（8 source files）
+- Commit：`3450914 0925 feat: finish readme, logging, public api`（分支 `feature/task9_public-api`，working tree 乾淨）

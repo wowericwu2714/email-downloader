@@ -1,3 +1,4 @@
+import logging
 import os
 from pathlib import Path
 
@@ -24,6 +25,7 @@ from email_downloader.folders import resolve_folder
 from email_downloader.models import ConflictPolicy, MailMessage, MailQuery
 from email_downloader.protocols import ComSessionFactory
 
+logger = logging.getLogger(__name__)
 
 class OutlookClient:
     """High-level Outlook mail search client."""
@@ -40,9 +42,27 @@ class OutlookClient:
         *, 
         limit: int | None = None,
     ) -> list[MailMessage]:
-        """Search Outlook messages matching the query."""
+        """Search Outlook messages matching the supplied query.
+
+        Args:
+            query: Search criteria.
+            limit: Maximum number of matching messages to return.
+
+        Returns:
+            Matching messages ordered from newest to oldest.
+
+        Raises:
+            ValueError: If limit is less than 1.
+        """
+
         if limit is not None and limit < 1:
             raise ValueError("limit must be at least 1")
+
+        logger.debug(
+            "Searching Outlook mail: folder=%r, limit=%r",
+            query.folder,
+            limit,
+        )
 
         results: list[MailMessage] = []
 
@@ -53,6 +73,7 @@ class OutlookClient:
             restrict_filter = build_restrict_filter(query)
 
             if restrict_filter is not None:
+                logger.debug("Applying restrict filter: %s", restrict_filter)
                 items = items.Restrict(restrict_filter)
 
             items.Sort("[ReceivedTime]", True)
@@ -77,13 +98,26 @@ class OutlookClient:
                 if limit is not None and len(results) >= limit:
                     break
 
+        logger.debug(
+            "Outlook search matched %d message(s)",
+            len(results),
+        )
+
         return results
 
     def find_latest(
         self,
         query: MailQuery,
     ) -> MailMessage | None:
-        """Return the newest message matching the query."""
+        """Return the newest message matching the query.
+
+        Args:
+            query: Search criteria.
+
+        Returns:
+            The newest matching message, or None when no message matches.
+        """
+    
         messages = self.search(query, limit=1)
         return messages[0] if messages else None
 
@@ -97,7 +131,32 @@ class OutlookClient:
         filename_contains: str | None = None,
         conflict: ConflictPolicy = "error",
     ) -> list[Path]:
-        """Download matching attachments from a previously found Outlook message."""
+        """Download matching attachments from a previously found message.
+
+        The Outlook item is opened again using its EntryID and StoreID.
+        No COM object is stored inside MailMessage.
+
+        Args:
+            message: Message returned by search() or find_latest().
+            output_dir: Directory where attachments will be saved.
+            extensions: Allowed attachment extensions.
+            filename: Exact attachment filename filter.
+            filename_contains: Partial attachment filename filter.
+            conflict: Behaviour when the destination already exists.
+
+        Returns:
+            Paths successfully saved.
+
+        Raises:
+            AttachmentNotFoundError:
+                No attachment metadata matches the filters.
+            MailAccessError:
+                The original Outlook message or attachment can no longer
+                be accessed safely.
+            AttachmentSaveError:
+                Outlook failed to save an attachment.
+        """
+
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)
 
@@ -154,13 +213,21 @@ class OutlookClient:
                 )
 
                 if destination is None:
+                    logger.info(
+                        "Skipping attachment %r for message %r (conflict=%r)",
+                        current_filename,
+                        message.subject,
+                        conflict,
+                    )
                     continue
 
                 try:
                     attachment.SaveAsFile(str(destination.resolve()))
                 except Exception: # noqa: BLE001 -- best-effort save; failure is recorded and reported after the loop.
                     failures.append(current_filename)
+                    continue
 
+                logger.info("Saved attachment %r to %s", current_filename, destination)
 
                 paths.append(destination)
 
@@ -180,7 +247,22 @@ class OutlookClient:
         *,
         conflict: ConflictPolicy = "error",
     ) -> list[Path]:
-        """Download matching attachments from the latest matching message."""
+        """Find the newest matching message and download its attachments.
+
+        Args:
+            query: Mail and attachment search criteria.
+            output_dir: Directory where attachments will be saved.
+            conflict: Behaviour when a destination file already exists.
+
+        Returns:
+            Paths successfully saved.
+
+        Raises:
+            MailNotFoundError:
+                No message matched the query.
+            AttachmentNotFoundError:
+                A message matched, but no attachment matched.
+        """
         message = self.find_latest(query)
         
         if message is None:

@@ -6,7 +6,7 @@ from email_downloader.models import MailQuery
 
 
 def test_query_normalizes_extensions() -> None:
-    query = MailQuery(attachment_extensions=["XLSX", ".xls", ".XLSX"])
+    query = MailQuery(attachment_extensions=("XLSX", ".xls", ".XLSX"))
     assert query.attachment_extensions == (".xlsx", ".xls")
 
 def test_query_rejects_reversed_time_range() -> None:

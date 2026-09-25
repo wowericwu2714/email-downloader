@@ -43,10 +43,10 @@ def install_fake_pywin32(
 
         return FakeApplication()
 
-    pythoncom.CoInitialize = co_initialize
-    pythoncom.CoUninitialize = co_uninitialize
-    win32com_client.Dispatch = dispatch
-    win32com.client = win32com_client
+    pythoncom.CoInitialize = co_initialize      # type: ignore[attr-defined]
+    pythoncom.CoUninitialize = co_uninitialize  # type: ignore[attr-defined]
+    win32com_client.Dispatch = dispatch        # type: ignore[attr-defined]
+    win32com.client = win32com_client          # type: ignore[attr-defined]
 
     monkeypatch.setitem(sys.modules, "pythoncom", pythoncom)
     monkeypatch.setitem(sys.modules, "win32com", win32com)

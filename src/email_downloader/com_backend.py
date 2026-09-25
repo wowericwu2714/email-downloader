@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import PureWindowsPath
@@ -9,13 +10,29 @@ from email_downloader.exceptions import (
 )
 from email_downloader.models import AttachmentInfo, MailMessage
 
+logger = logging.getLogger(__name__)
+
+
 
 class Pywin32SessionFactory:
     """Create Outlook MAPI sessions through pywin32."""
 
     @contextmanager
     def session(self) -> Generator[Any, None, None]:
-        """Yield an Outlook MAPI namespace with COM lifecycle management."""
+        """Open an Outlook COM session for the current thread.
+
+        pywin32 is imported lazily so importing this package does not
+        require Windows or Outlook until a COM operation is actually used.
+
+        Yields:
+            Outlook MAPI namespace.
+
+        Raises:
+            OutlookUnavailableError:
+                pywin32 is unavailable.
+            OutlookConnectionError:
+                Outlook could not be opened.
+        """
         try:
             import pythoncom
             import win32com.client
@@ -39,7 +56,18 @@ class Pywin32SessionFactory:
 
 
 def get_sender_email(item: Any) -> str | None:
-    """Return the sender SMTP address when available."""
+    """Return the best available SMTP sender address.
+
+    Exchange internal messages may expose an EX address instead of SMTP.
+    In that case, GetExchangeUser().PrimarySmtpAddress is preferred.
+
+    Args:
+        item: Outlook MailItem-like object.
+
+    Returns:
+        SMTP address when available, otherwise the original sender address.
+    """
+
     original_address = getattr(item, "SenderEmailAddress", None)
     sender_type = getattr(item, "SenderEmailType", None)
 
@@ -60,6 +88,10 @@ def get_sender_email(item: Any) -> str | None:
         return primary_smtp or original_address
     
     except Exception:  # noqa: BLE001 -- Exchange COM lookup failure must fall back safely.
+        logger.debug(
+            "Could not resolve Exchange sender SMTP address; "
+            "using original sender address"
+        )
         return original_address
 
 
@@ -71,7 +103,19 @@ def _safe_getattr(obj: Any, name: str, default: Any = None) -> Any:
         return default
 
 def mail_item_to_message(item: Any, store_id: str) -> MailMessage:
-    """Convert an Outlook MailItem into a pure Python MailMessage."""
+    """Convert an Outlook MailItem into a pure Python MailMessage.
+
+    Args:
+        item: Outlook MailItem-like object.
+        store_id: Outlook store identifier used to reopen the message.
+
+    Returns:
+        Pure Python MailMessage.
+
+    Raises:
+        AttributeError:
+            A required Outlook property is unavailable.
+    """
     if getattr(item, "Class", None) != 43:  # olMail
         raise ValueError("Outlook item is not a MailItem")
 
