@@ -9,10 +9,13 @@
 - [x] Task 5: 建立可測試的 COM session 與信件映射（`com_backend.py`，已合併至 main）
 - [x] Task 6: 實作 `search()` 與 `find_latest()`（`client.py`，已合併至 main）
 - [x] Task 7: 實作附件篩選與同名檔策略（`attachments.py`，已合併至 main）
-- [x] Task 8: 實作附件下載與 `download_latest()`（`client.py` 的 `download_attachments`／`download_latest`，分支 `feature/task8_attachment-download`，review 修正尚未 commit）
+- [x] Task 8: 實作附件下載與 `download_latest()`（`client.py` 的 `download_attachments`／`download_latest`，已合併至 main）
 - [x] Task 9: 穩定 public exports、logging 與使用文件（分支 `feature/task9_public-api`，commit `3450914`）
+- [x] Task 12: 支援遞迴搜尋子資料夾（commit `bbb01d0`，PR #2 已合併至 main `696cf9f`）
 - [ ] Task 10: 在真實 Windows Outlook 執行 opt-in smoke test
 - [ ] Task 11: 完整驗證、建立 wheel 與跨專案試裝
+
+> Task 12 是後來才追加進 `docs/email-downloader-PLAN.md` 的新任務（原計畫的 Task 10/11 之前），所以編號沒有照順序放，這裡維持文件裡的實際 Task 編號。
 
 > 注意：這份文件在 2026-09-24 的一次合併衝突處理（commit `ee71a4f`）中被意外還原成舊版本（連同 `com_backend.py` 的內容重複問題一起發生），2026-09-25 已依對話紀錄重新整理回正確狀態。以後解衝突時這份檔案也要仔細檢查，不能整份被舊版蓋掉。
 
@@ -92,3 +95,26 @@
 - `uv run mypy src`：Success（9 source files）
 - `uv run mypy tests`：Success（8 source files）
 - Commit：`3450914 0925 feat: finish readme, logging, public api`（分支 `feature/task9_public-api`，working tree 乾淨）
+
+## Task 12 完成內容（commit `bbb01d0`，PR #2 已合併至 main）
+
+- `MailQuery.recursive: bool = False`：新欄位，不用額外驗證邏輯。
+- `folders.iter_folder_tree(folder: Any) -> Iterator[Any]`：DFS 走訪一個資料夾自己與底下所有層級的子資料夾，不限深度。
+- `client.py` 新增模組層級私有函式 `_search_folder(folder, query, *, limit)`：把原本 `search()` 裡「搜一個資料夾」的邏輯抽出來，`recursive=False`／`True` 都會用到。
+- `search()` 分支邏輯：
+  - `recursive=False`（預設）：只呼叫一次 `_search_folder(root_folder, query, limit=limit)`，行為與提早中斷優化跟改之前完全一樣。
+  - `recursive=True`：對 `iter_folder_tree(root_folder)` 的每個資料夾呼叫 `_search_folder(folder, query, limit=None)`（不提早中斷）、`results.extend(...)`；某個子資料夾整個處理過程中丟例外就跳過（`except Exception:  # noqa: BLE001, S112 -- ...`，記一筆 `logger.warning`），不影響其他資料夾；全部資料夾跑完後才對 `results` 依 `received_time` 做一次全域排序，最後才用 `limit` 截斷。
+  - 只有 `query.folder` 這個根路徑本身不存在時（`resolve_folder()` 丟出的 `FolderNotFoundError`），才維持原本行為，不會被上面的 subfolder try/except 蓋掉。
+- `find_latest()`／`download_latest()` 不用改介面，`recursive` 隨著 `query` 物件自動帶過去。
+
+### Task 12 開發中的一次 TDD 除錯紀錄
+
+照計畫規定「先寫測試」，測試（`iter_folder_tree` 的多層走訪、`search(recursive=True)` 的合併排序／limit 延後截斷／子資料夾失敗跳過）先寫好、跑起來全部紅燈後才貼實作。第一版實作貼上後除了 3 個小 import／型別標註問題（`ruff --fix` 自動修、`noqa` 少蓋 `S112`、mypy strict 缺回傳型別），還抓到一個**所有 `search()` 測試（含完全沒用到 recursive 的舊測試）全部回傳空 list** 的真實 bug：把原本該放在 `search()` 遞迴分支結尾的「排序＋`limit` 截斷＋log」那段程式碼誤貼進 `_search_folder()` 的 for 迴圈裡面，而且漏掉了 `results.append(message)`，導致函式在處理到第一筆符合的信件時，還沒 append 就直接 `return` 一個空的 `results`。修法：把 `results.append(message)` 補回、`return results` 移到迴圈外面，`_search_folder()` 只保留單一資料夾的搜尋邏輯，排序／截斷邏輯留在 `search()` 裡。這次是靠先寫好的測試立刻抓到，沒有這批測試的話，這個 bug 會讓 `search()`／`find_latest()`／`download_latest()` 全部靜默回傳空結果，非常危險。
+
+## 最後驗證狀態（2026-09-26，Task 12 完成並已合併至 main）
+
+- `uv run pytest tests/ -v`：72 passed
+- `uv run ruff check .`：All checks passed
+- `uv run mypy src`：Success（9 source files）
+- `uv run mypy tests`：Success（8 source files）
+- Commit：`bbb01d0 0926 feat: support recursive subfolder search`（PR #2，`feature/task12_recursive-folder-search` → `main` `696cf9f`），working tree 乾淨
