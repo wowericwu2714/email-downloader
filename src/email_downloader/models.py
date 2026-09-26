@@ -36,6 +36,7 @@ class MailQuery:
     attachment_name_contains: str | None = None
     attachment_extensions: tuple[str, ...] = ()
     unread_only: bool = False
+    recursive: bool = False
 
     def __post_init__(self) -> None:
         # Folder 不可為空

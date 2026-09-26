@@ -1,3 +1,4 @@
+from collections.abc import Iterator
 from typing import Any
 
 from email_downloader.exceptions import FolderNotFoundError
@@ -32,3 +33,9 @@ def resolve_folder(namespace: Any, path: str) -> Any:
         ) from exc
     
     return folder
+
+def iter_folder_tree(folder: Any) -> Iterator[Any]:
+    """Yield a folder and all of its subfolders, depth-first, at every level."""
+    yield folder
+    for sub in folder.Folders:
+        yield from iter_folder_tree(sub)

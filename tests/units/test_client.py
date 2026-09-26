@@ -36,9 +36,10 @@ class FakeItems:
 
 
 class FakeFolder:
-    def __init__(self, items: FakeItems) -> None:
+    def __init__(self, items: FakeItems, folders: list[Any] | None = None) -> None:
         self.Items = items
         self.StoreID = "store-123"
+        self.Folders = folders or []
 
 class FakeSessionFactory:
     def __init__(self, namespace: object) -> None:
@@ -53,6 +54,7 @@ def make_message(
     entry_id: str,
     *,
     subject: str = "Daily Inventory",
+    received_time: datetime = datetime(2026, 9, 23, 8, 0),
 ) -> MailMessage:
     return MailMessage(
         entry_id=entry_id,
@@ -60,7 +62,7 @@ def make_message(
         subject=subject,
         sender_name="Warehouse",
         sender_email="warehouse@example.com",
-        received_time=datetime(2026, 9, 23, 8, 0),
+        received_time=received_time,
         unread=False,
         attachments=(),
     )
@@ -821,3 +823,104 @@ def test_download_latest_downloads_matching_message(
         filename_contains=query.attachment_name_contains,
         conflict="rename",
     )
+
+
+def test_search_recursive_merges_and_sorts_across_subfolders(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeMailItem:
+        Class = 43
+
+    root_items = FakeItems([FakeMailItem()])
+    child_items = FakeItems([FakeMailItem()])
+
+    child_folder = FakeFolder(child_items)
+    root_folder = FakeFolder(root_items, folders=[child_folder])
+
+    namespace = object()
+
+    older_message = make_message("entry-old", received_time=datetime(2026, 9, 20, 8, 0))
+    newer_message = make_message("entry-new", received_time=datetime(2026, 9, 23, 8, 0))
+    messages = iter([older_message, newer_message])
+
+    monkeypatch.setattr(client_module, "resolve_folder", lambda namespace, path: root_folder)
+    monkeypatch.setattr(client_module, "build_restrict_filter", lambda query: None)
+    monkeypatch.setattr(client_module, "mail_item_to_message", lambda item, store_id: next(messages))
+    monkeypatch.setattr(client_module, "message_matches", lambda message, query: True)
+
+    client = OutlookClient(
+        session_factory=FakeSessionFactory(namespace)
+    )
+
+    result = client.search(
+        MailQuery(recursive=True),
+    )
+
+    assert [message.entry_id for message in result] == ["entry-new", "entry-old"]
+
+
+def test_search_recursive_applies_limit_after_global_sort(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeMailItem:
+        Class = 43
+
+    root_items = FakeItems([FakeMailItem()])
+    child_items = FakeItems([FakeMailItem()])
+
+    child_folder = FakeFolder(child_items)
+    root_folder = FakeFolder(root_items, folders=[child_folder])
+
+    namespace = object()
+
+    older_message = make_message("entry-old", received_time=datetime(2026, 9, 20, 8, 0))
+    newer_message = make_message("entry-new", received_time=datetime(2026, 9, 23, 8, 0))
+    messages = iter([older_message, newer_message])
+
+    monkeypatch.setattr(client_module, "resolve_folder", lambda namespace, path: root_folder)
+    monkeypatch.setattr(client_module, "build_restrict_filter", lambda query: None)
+    monkeypatch.setattr(client_module, "mail_item_to_message", lambda item, store_id: next(messages))
+    monkeypatch.setattr(client_module, "message_matches", lambda message, query: True)
+
+    client = OutlookClient(session_factory=FakeSessionFactory(namespace))
+
+    result = client.search(MailQuery(recursive=True), limit=1)
+
+    assert [message.entry_id for message in result] == ["entry-new"]
+
+
+def test_search_recursive_skips_subfolder_that_fails_to_read(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeMailItem:
+        Class = 43
+
+    class BrokenItems:
+        def Sort(self, property_name: str, descending: bool) -> None:
+            pass
+
+        def __iter__(self) -> Iterator[Any]:
+            raise RuntimeError("access denied")
+
+    class BrokenFolder:
+        def __init__(self) -> None:
+            self.Items = BrokenItems()
+            self.Folders: list[Any] = []
+            self.StoreID = "store-broken"
+
+    root_items = FakeItems([FakeMailItem()])
+    root_folder = FakeFolder(root_items, folders=[BrokenFolder()])
+
+    namespace = object()
+    message = make_message("entry-1")
+
+    monkeypatch.setattr(client_module, "resolve_folder", lambda namespace, path: root_folder)
+    monkeypatch.setattr(client_module, "build_restrict_filter", lambda query: None)
+    monkeypatch.setattr(client_module, "mail_item_to_message", lambda item, store_id: message)
+    monkeypatch.setattr(client_module, "message_matches", lambda message, query: True)
+
+    client = OutlookClient(session_factory=FakeSessionFactory(namespace))
+
+    result = client.search(MailQuery(recursive=True))
+
+    assert result == [message]

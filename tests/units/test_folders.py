@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
+
 import pytest
 
 from email_downloader.exceptions import FolderNotFoundError
-from email_downloader.folders import resolve_folder, split_folder_path
+from email_downloader.folders import iter_folder_tree, resolve_folder, split_folder_path
 
 
 @pytest.mark.parametrize(
@@ -35,6 +37,9 @@ class FakeFolders:
 
     def Item(self, name: str) -> FakeFolder:
         return self._folders[name]
+
+    def __iter__(self) -> Iterator[FakeFolder]:
+        return iter(self._folders.values())
 
 class FakeFolder:
     def __init__(self, name: str, children: dict[str, FakeFolder] | None = None, ) -> None:
@@ -71,3 +76,12 @@ def test_resolve_folder_raises_package_error_for_missing_folder() -> None:
 
     assert path in str(exc_info.value)
 
+def test_iter_folder_tree_yields_folder_and_all_descendants() -> None:
+    grandchild = FakeFolder("孫")
+    child_a = FakeFolder("A", children={"孫": grandchild})
+    child_b = FakeFolder("B")
+    root = FakeFolder("根", children={"A": child_a, "B": child_b})
+
+    result = list(iter_folder_tree(root))
+
+    assert result == [root, child_a, grandchild, child_b]
