@@ -15,21 +15,19 @@ from email_downloader.folders import iter_folder_tree, resolve_folder, split_fol
         (r"收件匣\外倉\MSS", ("外倉", "MSS")),
         ("Inbox/Shipping Schedule", ("Shipping Schedule",)),
         ("外倉/MSS", ("外倉", "MSS")),
-    ]
+    ],
 )
-
 def test_split_folder_path(
-    value: str, 
+    value: str,
     expected: tuple[str, ...],
 ) -> None:
     assert split_folder_path(value) == expected
 
+
 def test_split_folder_path_rejects_empty_segment() -> None:
-    with pytest.raises(
-        ValueError,
-        match="empty segment"
-    ):
+    with pytest.raises(ValueError, match="empty segment"):
         split_folder_path("收件匣//MSS")
+
 
 class FakeFolders:
     def __init__(self, folders: dict[str, FakeFolder]) -> None:
@@ -41,8 +39,13 @@ class FakeFolders:
     def __iter__(self) -> Iterator[FakeFolder]:
         return iter(self._folders.values())
 
+
 class FakeFolder:
-    def __init__(self, name: str, children: dict[str, FakeFolder] | None = None, ) -> None:
+    def __init__(
+        self,
+        name: str,
+        children: dict[str, FakeFolder] | None = None,
+    ) -> None:
         self.name = name
         self.Folders = FakeFolders(children or {})
 
@@ -57,6 +60,7 @@ class FakeNamespace:
 
         return self._inbox
 
+
 def test_resolve_folder_returns_nested_folder() -> None:
     mss = FakeFolder("MSS")
     warehouse = FakeFolder("外倉", children={"MSS": mss})
@@ -65,6 +69,7 @@ def test_resolve_folder_returns_nested_folder() -> None:
 
     resolved = resolve_folder(namespace, "收件匣/外倉/MSS")
     assert resolved is mss
+
 
 def test_resolve_folder_raises_package_error_for_missing_folder() -> None:
     inbox = FakeFolder("收件匣")
@@ -75,6 +80,7 @@ def test_resolve_folder_raises_package_error_for_missing_folder() -> None:
         resolve_folder(namespace, path)
 
     assert path in str(exc_info.value)
+
 
 def test_iter_folder_tree_yields_folder_and_all_descendants() -> None:
     grandchild = FakeFolder("孫")

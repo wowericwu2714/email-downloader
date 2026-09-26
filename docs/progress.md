@@ -13,7 +13,7 @@
 - [x] Task 9: 穩定 public exports、logging 與使用文件（分支 `feature/task9_public-api`，commit `3450914`）
 - [x] Task 12: 支援遞迴搜尋子資料夾（commit `bbb01d0`，PR #2 已合併至 main `696cf9f`）
 - [x] Task 10: 在真實 Windows Outlook 執行 opt-in smoke test（commit `d4cd806`，分支 `feature/task10_smoke-test`，尚未合併至 main）
-- [ ] Task 11: 完整驗證、建立 wheel 與跨專案試裝
+- [ ] Task 11: 完整驗證、建立 wheel 與跨專案試裝（分支 `feature/task11_build-test`，Step 1-4 完成，Step 5/6 待決定，尚未 commit）
 
 > Task 12 是後來才追加進 `docs/email-downloader-PLAN.md` 的新任務（原計畫的 Task 10/11 之前），所以編號沒有照順序放，這裡維持文件裡的實際 Task 編號。
 
@@ -141,3 +141,36 @@
 - `uv run mypy tests`：Success
 - Commit：`d4cd806 0926 test: add opt-in outlook smoke coverage`（分支 `feature/task10_smoke-test`）
 - 待 commit：`README.md`、`docs/progress.md` 的說明更新（尚未加進上面那個 commit）
+
+## Task 11 進度（分支 `feature/task11_build-test`）
+
+### Step 1：非實機測試 + coverage —— 完成
+
+跑之前發現 `filters.py` 只有 84% coverage（低於 plan 要求的 90%），漏掉的都是 `message_matches()`／`attachment_matches()` 裡「exact／contains 條件不符合時回傳 `False`」的負向分支——現有測試大多只驗證「符合時回傳 `True`」，負向路徑（正確排除不符合的信）反而沒測到。這些是核心比對邏輯，補了 8 個測試涵蓋所有負向分支後 `filters.py` 到 100%，整體 coverage 97%（80 passed）。
+
+### Step 2：靜態檢查 —— 完成
+
+`ruff format --check .` 第一次跑列出 19 個檔案要重排版（這個專案從沒跑過 `ruff format`，純格式差異，不含邏輯變動；連 `docs/email-downloader-PLAN.md` 內嵌的 Python code block 都被一起格式化）。套用 `ruff format .` 後，`ruff format --check .`／`ruff check .`／`mypy src`／`pytest` 全部確認過一遍，沒有因為重排版而壞掉任何東西。
+
+### Step 3：建 wheel + `twine check` —— 完成
+
+`uv build` 產生 `dist/email_downloader-0.1.0-py3-none-any.whl` 與 `.tar.gz`，`uvx twine check dist\*` 兩個都 PASSED。
+
+### Step 4：獨立 uv project 試裝 —— 完成
+
+在 repo 之外的暫存目錄（`$env:TEMP\email-downloader-consumer`）建全新 uv project，`uv add` 剛剛建好的 `.whl` 檔案，`uv run python -c "from email_downloader import OutlookClient, MailQuery; print(MailQuery())"` 成功印出預設值（含 `recursive=False`），確認不需要 `--editable`、不需要動 `PYTHONPATH` 就能正常使用。
+
+### Step 5／6：待決定
+
+- Step 5（挑一個真實外倉／ICS 專案做最小整合，連續執行兩次驗證 conflict policy）：需要使用者自己在其他專案操作，目前尚未進行。
+- Step 6（打 `v0.1.0` tag）：建議等 Step 5 實際跑過、確認沒問題後再打，避免打了 tag 之後 Step 5 又發現要改的地方。
+
+### 最後驗證狀態（2026-09-26，Task 11 Step 1-4 完成，尚未 commit）
+
+- `uv run pytest -m "not outlook_integration" --cov=email_downloader --cov-report=term-missing`：80 passed，整體 coverage 97%
+- `uv run ruff format --check .`：22 files already formatted
+- `uv run ruff check .`：All checks passed
+- `uv run mypy src`：Success（9 source files）
+- `uv build` + `uvx twine check dist\*`：wheel／sdist 都 PASSED
+- 獨立 consumer project 試裝：import 成功
+- 待 commit 檔案：`tests/units/test_filters.py`（新增 8 個測試）、以及 `ruff format .` 重排版的 19 個檔案

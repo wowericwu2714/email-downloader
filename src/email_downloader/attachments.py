@@ -23,7 +23,10 @@ def select_attachments(
         if filename is not None and attachment_filename != filename.casefold():
             continue
 
-        if filename_contains is not None and filename_contains.casefold() not in attachment_filename:
+        if (
+            filename_contains is not None
+            and filename_contains.casefold() not in attachment_filename
+        ):
             continue
 
         if normalized_exts and attachment.extension.casefold() not in normalized_exts:
@@ -33,11 +36,8 @@ def select_attachments(
 
     return tuple(selected)
 
-def resolve_destination(
-    destination: Path, 
-    *,
-    conflict: str
-) -> Path | None:
+
+def resolve_destination(destination: Path, *, conflict: str) -> Path | None:
     """Resolve the destination path according to the conflict policy."""
     if not destination.exists():
         return destination
@@ -49,12 +49,9 @@ def resolve_destination(
         return None
 
     if conflict == "error":
-        raise AttachmentConflictError(
-            f"Attachment destination already exists: {destination}"
-        )
+        raise AttachmentConflictError(f"Attachment destination already exists: {destination}")
 
     if conflict == "rename":
-
         suffix = "".join(destination.suffixes)
 
         if suffix:
@@ -64,15 +61,14 @@ def resolve_destination(
         counter = 1
 
         while True:
-            candidate = destination.with_name(
-                f"{stem}_{counter}{suffix}"
-            )
+            candidate = destination.with_name(f"{stem}_{counter}{suffix}")
 
             if not candidate.exists():
                 return candidate
 
             counter += 1
     raise ValueError(f"Unknown conflict policy: {conflict}")
+
 
 def safe_attachment_name(filename: str) -> str:
     """Return a safe basename for an Outlook attachment filename."""

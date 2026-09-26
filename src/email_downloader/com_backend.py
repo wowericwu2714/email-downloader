@@ -13,7 +13,6 @@ from email_downloader.models import AttachmentInfo, MailMessage
 logger = logging.getLogger(__name__)
 
 
-
 class Pywin32SessionFactory:
     """Create Outlook MAPI sessions through pywin32."""
 
@@ -49,8 +48,8 @@ class Pywin32SessionFactory:
                 application = win32com.client.Dispatch("Outlook.Application")
                 namespace = application.GetNamespace("MAPI")
             except Exception as exc:
-                 raise OutlookConnectionError("Could not open Outlook MAPI session") from exc
-            yield namespace     
+                raise OutlookConnectionError("Could not open Outlook MAPI session") from exc
+            yield namespace
         finally:
             pythoncom.CoUninitialize()
 
@@ -78,7 +77,7 @@ def get_sender_email(item: Any) -> str | None:
         sender = getattr(item, "Sender", None)
         if sender is None:
             return original_address
-        
+
         exchange_user = sender.GetExchangeUser()
 
         if exchange_user is None:
@@ -86,11 +85,10 @@ def get_sender_email(item: Any) -> str | None:
 
         primary_smtp = getattr(exchange_user, "PrimarySmtpAddress", None)
         return primary_smtp or original_address
-    
+
     except Exception:  # noqa: BLE001 -- Exchange COM lookup failure must fall back safely.
         logger.debug(
-            "Could not resolve Exchange sender SMTP address; "
-            "using original sender address"
+            "Could not resolve Exchange sender SMTP address; using original sender address"
         )
         return original_address
 
@@ -99,8 +97,9 @@ def _safe_getattr(obj: Any, name: str, default: Any = None) -> Any:
     """Return an optional COM attribute, falling back when access fails."""
     try:
         return getattr(obj, name, default)
-    except Exception:   # noqa: BLE001 -- Optional COM properties may fail independently.
+    except Exception:  # noqa: BLE001 -- Optional COM properties may fail independently.
         return default
+
 
 def mail_item_to_message(item: Any, store_id: str) -> MailMessage:
     """Convert an Outlook MailItem into a pure Python MailMessage.
@@ -118,7 +117,6 @@ def mail_item_to_message(item: Any, store_id: str) -> MailMessage:
     """
     if getattr(item, "Class", None) != 43:  # olMail
         raise ValueError("Outlook item is not a MailItem")
-
 
     # Required fields: intentionally accessed directly.
     entry_id = item.EntryID
@@ -154,4 +152,3 @@ def mail_item_to_message(item: Any, store_id: str) -> MailMessage:
         unread=bool(_safe_getattr(item, "UnRead", False)),
         attachments=tuple(attachments),
     )
-
