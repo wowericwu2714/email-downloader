@@ -8,4 +8,3 @@ class ComSessionFactory(Protocol):
     def session(self) -> AbstractContextManager[Any]:
         """Return a context manager yielding an Outlook MAPI namespace."""
         ...
-

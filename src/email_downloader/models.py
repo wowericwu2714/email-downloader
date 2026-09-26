@@ -4,12 +4,14 @@ from typing import Literal, TypeAlias
 
 ConflictPolicy: TypeAlias = Literal["overwrite", "skip", "rename", "error"]
 
+
 @dataclass(frozen=True, slots=True)
 class AttachmentInfo:
     index: int
     filename: str
     extension: str
     size: int | None = None
+
 
 @dataclass(frozen=True, slots=True)
 class MailMessage:
@@ -20,7 +22,8 @@ class MailMessage:
     sender_email: str | None
     received_time: datetime
     unread: bool
-    attachments: tuple[AttachmentInfo, ...] # ...表示長度不限
+    attachments: tuple[AttachmentInfo, ...]  # ...表示長度不限
+
 
 @dataclass(frozen=True, slots=True)
 class MailQuery:
@@ -67,22 +70,16 @@ class MailQuery:
         )
 
         for exact_field, contains_field in exclusive_fields:
-            if (
-                getattr(self, exact_field) is not None
-                and getattr(self, contains_field) is not None
-            ):
+            if getattr(self, exact_field) is not None and getattr(self, contains_field) is not None:
                 raise ValueError(
                     f"{exact_field} and {contains_field} cannot be used simultaneously"
                 )
 
-        object.__setattr__(self, "attachment_extensions", normalize_extensions(self.attachment_extensions))
+        object.__setattr__(
+            self, "attachment_extensions", normalize_extensions(self.attachment_extensions)
+        )
 
 
 def normalize_extensions(extensions: tuple[str, ...]) -> tuple[str, ...]:
     """Normalize attachment extensions to lowercase, leading-dot form, deduped."""
-    return tuple(
-        dict.fromkeys(
-            f".{ext.strip().lstrip('.').casefold()}"
-            for ext in extensions
-        )
-    )
+    return tuple(dict.fromkeys(f".{ext.strip().lstrip('.').casefold()}" for ext in extensions))

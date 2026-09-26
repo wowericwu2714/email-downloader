@@ -34,6 +34,7 @@ def test_resolve_destination_overwrite_returns_original_path(tmp_path: Path) -> 
 
     assert result == destination
 
+
 def test_resolve_destination_skip_returns_none(tmp_path: Path) -> None:
     destination = tmp_path / "庫存表.xlsx"
     destination.touch()
@@ -42,12 +43,14 @@ def test_resolve_destination_skip_returns_none(tmp_path: Path) -> None:
 
     assert result is None
 
+
 def test_resolve_destination_error_raises(tmp_path: Path) -> None:
     destination = tmp_path / "庫存表.xlsx"
     destination.touch()
 
     with pytest.raises(AttachmentConflictError):
         resolve_destination(destination, conflict="error")
+
 
 def test_resolve_destination_rename_uses_next_available_name(tmp_path: Path) -> None:
     destination = tmp_path / "庫存表.xlsx"
@@ -59,7 +62,6 @@ def test_resolve_destination_rename_uses_next_available_name(tmp_path: Path) -> 
     assert result == tmp_path / "庫存表_2.xlsx"
 
 
-
 @pytest.mark.parametrize(
     ("filename", "expected"),
     [
@@ -69,7 +71,6 @@ def test_resolve_destination_rename_uses_next_available_name(tmp_path: Path) -> 
         (r"C:\Temp\庫存表.xlsx", "庫存表.xlsx"),
     ],
 )
-
 def test_safe_attachment_name_returns_basename(
     filename: str,
     expected: str,
@@ -85,7 +86,6 @@ def test_safe_attachment_name_returns_basename(
         "..",
     ],
 )
-
 def test_safe_attachment_name_rejects_invalid_names(filename: str) -> None:
     with pytest.raises(ValueError):
         safe_attachment_name(filename)

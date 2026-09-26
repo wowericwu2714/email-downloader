@@ -822,8 +822,7 @@ def download_attachments(
     filename: str | None = None,
     filename_contains: str | None = None,
     conflict: ConflictPolicy = "error",
-) -> list[Path]:
-    ...
+) -> list[Path]: ...
 ```
 
 執行順序固定為：建立 output directory → 選出 metadata → 重新取得 mail item → 以 metadata 的 1-based index 取得附件 → 核對目前 `FileName` 仍與 metadata 相同 → 決定 destination → `SaveAsFile(str(destination.resolve()))` → 收集成功路徑。若信件附件在 search 與 download 之間改變，丟出 `MailAccessError`，避免下載錯誤附件。

@@ -41,6 +41,7 @@ class FakeFolder:
         self.StoreID = "store-123"
         self.Folders = folders or []
 
+
 class FakeSessionFactory:
     def __init__(self, namespace: object) -> None:
         self.namespace = namespace
@@ -83,7 +84,7 @@ def test_search_restricts_sorts_and_returns_matching_messages(
     message = make_message(entry_id="entry-1")
 
     monkeypatch.setattr(
-        client_module, 
+        client_module,
         "resolve_folder",
         lambda namespace, path: folder,
     )
@@ -103,23 +104,16 @@ def test_search_restricts_sorts_and_returns_matching_messages(
         lambda message, query: True,
     )
 
-    client = OutlookClient(
-        session_factory=FakeSessionFactory(namespace)
-    )
+    client = OutlookClient(session_factory=FakeSessionFactory(namespace))
 
-    result = client.search(
-        MailQuery(has_attachment=True)
-    )
+    result = client.search(MailQuery(has_attachment=True))
 
     assert result == [message]
 
-    assert items.restrict_calls == [
-        "[HasAttachment] = True"
-    ]
+    assert items.restrict_calls == ["[HasAttachment] = True"]
 
-    assert items.sort_calls == [
-        ("[ReceivedTime]", True)
-    ]
+    assert items.sort_calls == [("[ReceivedTime]", True)]
+
 
 def test_search_does_not_restrict_when_filter_is_none(
     monkeypatch: pytest.MonkeyPatch,
@@ -129,7 +123,7 @@ def test_search_does_not_restrict_when_filter_is_none(
     namespace = object()
 
     monkeypatch.setattr(
-        client_module, 
+        client_module,
         "resolve_folder",
         lambda namespace, path: folder,
     )
@@ -139,30 +133,23 @@ def test_search_does_not_restrict_when_filter_is_none(
         lambda query: None,
     )
 
-    client = OutlookClient(
-        session_factory=FakeSessionFactory(namespace)
-    )
+    client = OutlookClient(session_factory=FakeSessionFactory(namespace))
 
-    result = client.search(
-        MailQuery()
-    )
+    result = client.search(MailQuery())
 
     assert result == []
     assert items.restrict_calls == []
 
-    assert items.sort_calls == [
-        ("[ReceivedTime]", True)
-    ]
+    assert items.sort_calls == [("[ReceivedTime]", True)]
+
 
 @pytest.mark.parametrize("limit", [0, -1])
 def test_search_rejects_invalid_limit(limit: int) -> None:
-    client = OutlookClient(
-        session_factory=FakeSessionFactory(object())
-    )
+    client = OutlookClient(session_factory=FakeSessionFactory(object()))
 
     with pytest.raises(
         ValueError,
-        match="limit must be at least 1", 
+        match="limit must be at least 1",
     ):
         client.search(MailQuery(), limit=limit)
 
@@ -173,14 +160,12 @@ def test_search_ignores_non_mail_items(
     class FakeNonMailItem:
         Class = 99
 
-    
-
     items = FakeItems([FakeNonMailItem()])
     folder = FakeFolder(items)
     namespace = object()
 
     monkeypatch.setattr(
-        client_module, 
+        client_module,
         "resolve_folder",
         lambda namespace, path: folder,
     )
@@ -190,13 +175,9 @@ def test_search_ignores_non_mail_items(
         lambda query: None,
     )
 
-    client = OutlookClient(
-        session_factory=FakeSessionFactory(namespace)
-    )
+    client = OutlookClient(session_factory=FakeSessionFactory(namespace))
 
-    result = client.search(
-        MailQuery()
-    )
+    result = client.search(MailQuery())
 
     assert result == []
 
@@ -214,7 +195,7 @@ def test_search_excludes_messages_rejected_by_python_matcher(
     message = make_message("entry-1")
 
     monkeypatch.setattr(
-        client_module, 
+        client_module,
         "resolve_folder",
         lambda namespace, path: folder,
     )
@@ -234,13 +215,9 @@ def test_search_excludes_messages_rejected_by_python_matcher(
         lambda message, query: False,
     )
 
-    client = OutlookClient(
-        session_factory=FakeSessionFactory(namespace)
-    )
+    client = OutlookClient(session_factory=FakeSessionFactory(namespace))
 
-    result = client.search(
-        MailQuery()
-    )
+    result = client.search(MailQuery())
 
     assert result == []
 
@@ -261,7 +238,6 @@ def test_search_stops_when_limit_is_reached(
     folder = FakeFolder(items)
     namespace = object()
 
-
     messages = iter(
         [
             make_message("entry-1"),
@@ -271,7 +247,7 @@ def test_search_stops_when_limit_is_reached(
     )
 
     monkeypatch.setattr(
-        client_module, 
+        client_module,
         "resolve_folder",
         lambda namespace, path: folder,
     )
@@ -291,9 +267,7 @@ def test_search_stops_when_limit_is_reached(
         lambda message, query: True,
     )
 
-    client = OutlookClient(
-        session_factory=FakeSessionFactory(namespace)
-    )
+    client = OutlookClient(session_factory=FakeSessionFactory(namespace))
 
     result = client.search(
         MailQuery(),
@@ -304,6 +278,7 @@ def test_search_stops_when_limit_is_reached(
         "entry-1",
         "entry-2",
     ]
+
 
 def test_search_skips_items_that_fail_to_convert(
     monkeypatch: pytest.MonkeyPatch,
@@ -346,13 +321,9 @@ def test_search_skips_items_that_fail_to_convert(
         lambda message, query: True,
     )
 
-    client = OutlookClient(
-        session_factory=FakeSessionFactory(namespace)
-    )
+    client = OutlookClient(session_factory=FakeSessionFactory(namespace))
 
-    result = client.search(
-        MailQuery()
-    )
+    result = client.search(MailQuery())
 
     assert result == [message]
 
@@ -360,9 +331,7 @@ def test_search_skips_items_that_fail_to_convert(
 def test_find_latest_returns_first_search_result(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    client = OutlookClient(
-        session_factory=FakeSessionFactory(object())
-    )
+    client = OutlookClient(session_factory=FakeSessionFactory(object()))
 
     message = make_message("entry-1")
 
@@ -372,9 +341,7 @@ def test_find_latest_returns_first_search_result(
         lambda query, *, limit=None: [message],
     )
 
-    result = client.find_latest(
-        MailQuery()
-    )
+    result = client.find_latest(MailQuery())
 
     assert result == message
 
@@ -382,9 +349,7 @@ def test_find_latest_returns_first_search_result(
 def test_find_latest_returns_none_when_no_message_matches(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    client = OutlookClient(
-        session_factory=FakeSessionFactory(object())
-    )
+    client = OutlookClient(session_factory=FakeSessionFactory(object()))
 
     monkeypatch.setattr(
         client,
@@ -392,9 +357,7 @@ def test_find_latest_returns_none_when_no_message_matches(
         lambda query, *, limit=None: [],
     )
 
-    result = client.find_latest(
-        MailQuery()
-    )
+    result = client.find_latest(MailQuery())
 
     assert result is None
 
@@ -410,7 +373,6 @@ def test_download_attachments_returns_saved_paths(
 
     fake_mail_item = Mock()
     fake_mail_item.Attachments = fake_attachments
-
 
     namespace = Mock()
     namespace.GetItemFromID.return_value = fake_mail_item
@@ -446,7 +408,7 @@ def test_download_attachments_returns_saved_paths(
     )
 
     expected = tmp_path / "每日庫存.xlsx"
-    
+
     assert paths == [expected]
     namespace.GetItemFromID.assert_called_once_with(
         message.entry_id,
@@ -454,9 +416,8 @@ def test_download_attachments_returns_saved_paths(
     )
 
     fake_attachments.Item.assert_called_once_with(1)
-    fake_attachment.SaveAsFile.assert_called_once_with(
-        str(expected.resolve())
-    )
+    fake_attachment.SaveAsFile.assert_called_once_with(str(expected.resolve()))
+
 
 def test_download_attachments_translates_get_item_failure(
     tmp_path: Path,
@@ -476,9 +437,7 @@ def test_download_attachments_translates_get_item_failure(
         sender_email="warehouse@example.com",
         received_time=datetime(2026, 9, 24, 8, 0),
         unread=False,
-        attachments=(
-            AttachmentInfo(1, "每日庫存.xlsx", ".xlsx"),
-        ),
+        attachments=(AttachmentInfo(1, "每日庫存.xlsx", ".xlsx"),),
     )
 
     client = OutlookClient(session_factory=session_factory)
@@ -489,6 +448,7 @@ def test_download_attachments_translates_get_item_failure(
             output_dir=tmp_path,
             extensions=(".xlsx",),
         )
+
 
 def test_download_attachments_raises_when_no_attachment_matches(
     tmp_path: Path,
@@ -504,9 +464,7 @@ def test_download_attachments_raises_when_no_attachment_matches(
         sender_email="warehouse@example.com",
         received_time=datetime(2026, 9, 24, 8, 0),
         unread=False,
-        attachments=(
-            AttachmentInfo(1, "每日庫存.pdf", ".pdf"),
-        ),
+        attachments=(AttachmentInfo(1, "每日庫存.pdf", ".pdf"),),
     )
 
     with pytest.raises(AttachmentNotFoundError):
@@ -515,6 +473,7 @@ def test_download_attachments_raises_when_no_attachment_matches(
             output_dir=tmp_path,
             extensions=(".xlsx",),
         )
+
 
 def test_download_attachments_translates_save_failure(
     tmp_path: Path,
@@ -536,7 +495,6 @@ def test_download_attachments_translates_save_failure(
     session_factory.session.return_value.__enter__ = Mock(return_value=namespace)
     session_factory.session.return_value.__exit__ = Mock(return_value=False)
 
-
     message = MailMessage(
         entry_id="entry-001",
         store_id="store-001",
@@ -545,9 +503,7 @@ def test_download_attachments_translates_save_failure(
         sender_email="warehouse@example.com",
         received_time=datetime(2026, 9, 24, 8, 0),
         unread=False,
-        attachments=(
-            AttachmentInfo(1, "每日庫存.xlsx", ".xlsx"),
-        ),
+        attachments=(AttachmentInfo(1, "每日庫存.xlsx", ".xlsx"),),
     )
 
     client = OutlookClient(session_factory=session_factory)
@@ -618,7 +574,7 @@ def test_download_attachments_saves_remaining_when_one_fails(
 
 def test_download_attachments_skip_all_returns_empty_list(
     tmp_path: Path,
-) -> None:    
+) -> None:
 
     existing = tmp_path / "每日庫存.xlsx"
     existing.touch()
@@ -647,9 +603,7 @@ def test_download_attachments_skip_all_returns_empty_list(
         sender_email="warehouse@example.com",
         received_time=datetime(2026, 9, 24, 8, 0),
         unread=False,
-        attachments=(
-            AttachmentInfo(1, "每日庫存.xlsx", ".xlsx"),
-        ),
+        attachments=(AttachmentInfo(1, "每日庫存.xlsx", ".xlsx"),),
     )
 
     client = OutlookClient(session_factory=session_factory)
@@ -684,7 +638,6 @@ def test_download_attachments_raises_when_attachment_changed(
     session_factory.session.return_value.__enter__ = Mock(return_value=namespace)
     session_factory.session.return_value.__exit__ = Mock(return_value=False)
 
-
     message = MailMessage(
         entry_id="entry-001",
         store_id="store-001",
@@ -715,8 +668,8 @@ def test_download_attachments_raises_when_attachment_changed(
 
 
 def test_download_attachments_raises_when_attachment_missing(
-      tmp_path: Path,
-  ) -> None:
+    tmp_path: Path,
+) -> None:
     fake_attachments = Mock()
     fake_attachments.Item.side_effect = RuntimeError("attachment index out of range")
 
@@ -757,20 +710,21 @@ def test_download_attachments_raises_when_attachment_missing(
         )
 
     fake_attachments.Item.assert_called_once_with(1)
-    
+
 
 def test_download_latest_raises_when_no_message_matches(
     tmp_path: Path,
 ) -> None:
     client = OutlookClient()
 
-    client.find_latest = Mock(return_value=None)     # type: ignore[method-assign]
+    client.find_latest = Mock(return_value=None)  # type: ignore[method-assign]
 
     with pytest.raises(MailNotFoundError):
         client.download_latest(
             MailQuery(subject_contains="每日庫存"),
             output_dir=tmp_path,
         )
+
 
 def test_download_latest_downloads_matching_message(
     tmp_path: Path,
@@ -801,9 +755,8 @@ def test_download_latest_downloads_matching_message(
 
     client = OutlookClient()
 
-    client.find_latest = Mock(return_value=message)     # type: ignore[method-assign]
-    client.download_attachments = Mock(return_value=[tmp_path / "每日庫存.xlsx"])     # type: ignore[method-assign]
-
+    client.find_latest = Mock(return_value=message)  # type: ignore[method-assign]
+    client.download_attachments = Mock(return_value=[tmp_path / "每日庫存.xlsx"])  # type: ignore[method-assign]
 
     result = client.download_latest(
         query,
@@ -845,12 +798,12 @@ def test_search_recursive_merges_and_sorts_across_subfolders(
 
     monkeypatch.setattr(client_module, "resolve_folder", lambda namespace, path: root_folder)
     monkeypatch.setattr(client_module, "build_restrict_filter", lambda query: None)
-    monkeypatch.setattr(client_module, "mail_item_to_message", lambda item, store_id: next(messages))
+    monkeypatch.setattr(
+        client_module, "mail_item_to_message", lambda item, store_id: next(messages)
+    )
     monkeypatch.setattr(client_module, "message_matches", lambda message, query: True)
 
-    client = OutlookClient(
-        session_factory=FakeSessionFactory(namespace)
-    )
+    client = OutlookClient(session_factory=FakeSessionFactory(namespace))
 
     result = client.search(
         MailQuery(recursive=True),
@@ -879,7 +832,9 @@ def test_search_recursive_applies_limit_after_global_sort(
 
     monkeypatch.setattr(client_module, "resolve_folder", lambda namespace, path: root_folder)
     monkeypatch.setattr(client_module, "build_restrict_filter", lambda query: None)
-    monkeypatch.setattr(client_module, "mail_item_to_message", lambda item, store_id: next(messages))
+    monkeypatch.setattr(
+        client_module, "mail_item_to_message", lambda item, store_id: next(messages)
+    )
     monkeypatch.setattr(client_module, "message_matches", lambda message, query: True)
 
     client = OutlookClient(session_factory=FakeSessionFactory(namespace))

@@ -8,14 +8,15 @@ from email_downloader import MailQuery, OutlookClient
 
 pytestmark = pytest.mark.outlook_integration
 
+
 @pytest.mark.skipif(
     os.getenv("RUN_OUTLOOK_INTEGRATION") != "1",
     reason="set RUN_OUTLOOK_INTEGRATION=1 on a Windows Outlook workstation",
-)  
+)
 def test_can_search_recent_inbox_mail() -> None:
     client = OutlookClient()
     messages = client.search(
-        MailQuery(received_after=datetime.now() - timedelta(days=1)), 
+        MailQuery(received_after=datetime.now() - timedelta(days=1)),
         limit=1,
     )
     assert len(messages) <= 1

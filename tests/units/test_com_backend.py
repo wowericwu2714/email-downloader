@@ -43,10 +43,10 @@ def install_fake_pywin32(
 
         return FakeApplication()
 
-    pythoncom.CoInitialize = co_initialize      # type: ignore[attr-defined]
+    pythoncom.CoInitialize = co_initialize  # type: ignore[attr-defined]
     pythoncom.CoUninitialize = co_uninitialize  # type: ignore[attr-defined]
-    win32com_client.Dispatch = dispatch        # type: ignore[attr-defined]
-    win32com.client = win32com_client          # type: ignore[attr-defined]
+    win32com_client.Dispatch = dispatch  # type: ignore[attr-defined]
+    win32com.client = win32com_client  # type: ignore[attr-defined]
 
     monkeypatch.setitem(sys.modules, "pythoncom", pythoncom)
     monkeypatch.setitem(sys.modules, "win32com", win32com)
@@ -87,10 +87,13 @@ def test_session_uninitializes_com_when_dispatch_fails(
 
     factory = Pywin32SessionFactory()
 
-    with pytest.raises(
-        OutlookConnectionError,
-        match="Could not open Outlook MAPI session",
-    ), factory.session():
+    with (
+        pytest.raises(
+            OutlookConnectionError,
+            match="Could not open Outlook MAPI session",
+        ),
+        factory.session(),
+    ):
         pass
 
     assert events == [
@@ -104,7 +107,7 @@ def test_get_sender_email_returns_smtp_address() -> None:
     class FakeItem:
         SenderEmailType = "SMTP"
         SenderEmailAddress = "warehouse@example.com"
-    
+
     assert get_sender_email(FakeItem()) == "warehouse@example.com"
 
 
@@ -120,7 +123,7 @@ def test_get_sender_email_resolves_exchange_primary_smtp() -> None:
         SenderEmailType = "EX"
         SenderEmailAddress = "/O=COMPANY/OU=EXCHANGE/CN=RECIPIENTS/CN=WAREHOUSE"
         Sender = FakeSender()
-       
+
     assert get_sender_email(FakeItem()) == "warehouse@example.com"
 
 
@@ -144,7 +147,7 @@ class FakeAttachment:
         self.Filename = filename
         if size is not None:
             self.Size = size
-    
+
 
 class FakeAttachments:
     def __init__(self, *attachments: FakeAttachment) -> None:
@@ -153,6 +156,7 @@ class FakeAttachments:
 
     def Item(self, index: int) -> FakeAttachment:
         return self._attachments[index - 1]
+
 
 def test_mail_item_to_message_maps_fields_and_attachments() -> None:
     received_time = datetime(2026, 9, 22, 10, 30)
@@ -199,7 +203,7 @@ def test_mail_item_to_message_rejects_non_mail_item() -> None:
         Class = 99
 
     with pytest.raises(ValueError):
-        mail_item_to_message(FakeItem(), "store-456") 
+        mail_item_to_message(FakeItem(), "store-456")
 
 
 def test_mail_item_to_message_requires_entry_id() -> None:

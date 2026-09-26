@@ -29,7 +29,6 @@ from email_downloader.protocols import ComSessionFactory
 logger = logging.getLogger(__name__)
 
 
-
 def _search_folder(
     folder: Any,
     query: MailQuery,
@@ -72,15 +71,15 @@ class OutlookClient:
     """High-level Outlook mail search client."""
 
     def __init__(
-        self, 
+        self,
         session_factory: ComSessionFactory | None = None,
     ) -> None:
         self._session_factory = session_factory or Pywin32SessionFactory()
 
     def search(
-        self, 
+        self,
         query: MailQuery,
-        *, 
+        *,
         limit: int | None = None,
     ) -> list[MailMessage]:
         """Search Outlook messages matching the supplied query.
@@ -106,7 +105,6 @@ class OutlookClient:
             query.recursive,
         )
 
-
         with self._session_factory.session() as namespace:
             root_folder = resolve_folder(namespace, query.folder)
 
@@ -117,7 +115,7 @@ class OutlookClient:
                 for folder in iter_folder_tree(root_folder):
                     try:
                         results.extend(_search_folder(folder, query, limit=None))
-                    except Exception:   # noqa: BLE001 -- skip unreadable subfolder; logging deferred to a later task.
+                    except Exception:  # noqa: BLE001 -- skip unreadable subfolder; logging deferred to a later task.
                         logger.warning(
                             "Skipping unreadable Outlook subfolder while searching recursively"
                         )
@@ -126,7 +124,6 @@ class OutlookClient:
 
                 if limit is not None:
                     results = results[:limit]
-
 
         logger.debug(
             "Outlook search matched %d message(s)",
@@ -147,15 +144,15 @@ class OutlookClient:
         Returns:
             The newest matching message, or None when no message matches.
         """
-    
+
         messages = self.search(query, limit=1)
         return messages[0] if messages else None
 
     def download_attachments(
-        self, 
+        self,
         message: MailMessage,
         output_dir: str | os.PathLike[str],
-        *, 
+        *,
         extensions: tuple[str, ...] = (),
         filename: str | None = None,
         filename_contains: str | None = None,
@@ -212,13 +209,11 @@ class OutlookClient:
                     message.store_id,
                 )
             except Exception as exc:
-                raise MailAccessError(
-                    f"Failed to access mail item '{message.subject}'"
-                ) from exc
+                raise MailAccessError(f"Failed to access mail item '{message.subject}'") from exc
 
             attachments = item.Attachments
             for attachment_info in selected:
-                try: 
+                try:
                     attachment = attachments.Item(attachment_info.index)
                 except Exception as exc:
                     raise MailAccessError(
@@ -228,7 +223,6 @@ class OutlookClient:
 
                 current_filename = safe_attachment_name(attachment.FileName)
                 expected_filename = safe_attachment_name(attachment_info.filename)
-                
 
                 if current_filename.casefold() != expected_filename.casefold():
                     raise MailAccessError(
@@ -253,7 +247,7 @@ class OutlookClient:
 
                 try:
                     attachment.SaveAsFile(str(destination.resolve()))
-                except Exception: # noqa: BLE001 -- best-effort save; failure is recorded and reported after the loop.
+                except Exception:  # noqa: BLE001 -- best-effort save; failure is recorded and reported after the loop.
                     failures.append(current_filename)
                     continue
 
@@ -269,9 +263,8 @@ class OutlookClient:
 
         return paths
 
-
     def download_latest(
-        self, 
+        self,
         query: MailQuery,
         output_dir: str | os.PathLike[str],
         *,
@@ -294,7 +287,7 @@ class OutlookClient:
                 A message matched, but no attachment matched.
         """
         message = self.find_latest(query)
-        
+
         if message is None:
             raise MailNotFoundError(f"No mail found matching query: {query}")
 

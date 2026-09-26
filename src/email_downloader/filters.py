@@ -7,6 +7,7 @@ def format_outlook_datetime(value: datetime) -> str:
     """Format a datetime for Outlook Items.Restrict."""
     return value.strftime("%m/%d/%Y %I:%M %p")
 
+
 def build_restrict_filter(query: MailQuery) -> str | None:
     """Build an Outlook Items.Restrict filter from a mail query."""
     clauses: list[str] = []
@@ -27,6 +28,7 @@ def build_restrict_filter(query: MailQuery) -> str | None:
 
     return " AND ".join(clauses) or None
 
+
 def attachment_matches(
     attachment: AttachmentInfo,
     *,
@@ -37,25 +39,20 @@ def attachment_matches(
     """Return whether one attachment matches all requested conditions."""
     attachment_filename = attachment.filename.casefold()
     # filename 不符合
-    if (
-        filename is not None and
-        attachment_filename != filename.casefold()
-    ):
+    if filename is not None and attachment_filename != filename.casefold():
         return False
 
     # filename_contains 不符合
-    if (
-        filename_contains is not None
-        and filename_contains.casefold() not in attachment_filename
-    ):
-        return False  
+    if filename_contains is not None and filename_contains.casefold() not in attachment_filename:
+        return False
 
     # 沒有限制 extension
     if not extensions:
         return True
-    
+
     # 有限制 extension, 檢查是否在允許的副檔名中
     return attachment.extension.casefold() in normalize_extensions(extensions)
+
 
 def message_matches(message: MailMessage, query: MailQuery) -> bool:
     """Return whether a mail message matches Python-side query conditions."""
@@ -73,14 +70,11 @@ def message_matches(message: MailMessage, query: MailQuery) -> bool:
         if query.sender_contains.casefold() not in message.sender_email.casefold():
             return False
 
-    if (
-        query.subject is not None 
-        and message.subject.casefold() != query.subject.casefold()
-    ):
+    if query.subject is not None and message.subject.casefold() != query.subject.casefold():
         return False
 
     if (
-        query.subject_contains is not None 
+        query.subject_contains is not None
         and query.subject_contains.casefold() not in message.subject.casefold()
     ):
         return False
@@ -103,7 +97,7 @@ def message_matches(message: MailMessage, query: MailQuery) -> bool:
                 attachment,
                 filename=query.attachment_name,
                 filename_contains=query.attachment_name_contains,
-                extensions=query.attachment_extensions, 
+                extensions=query.attachment_extensions,
             )
             for attachment in message.attachments
         )
