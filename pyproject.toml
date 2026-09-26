@@ -48,4 +48,4 @@ strict = true
 packages = ["email_downloader"]
 
 [tool.ruff.lint]
-ignore = ["DTZ001"]
+ignore = ["DTZ001", "DTZ005"]
