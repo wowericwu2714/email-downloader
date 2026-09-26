@@ -87,6 +87,8 @@ messages = client.search(
 )
 ```
 
+`MailQuery.recursive`（預設 `False`）設為 `True` 時，會連同 `folder` 底下所有層級的子資料夾一起搜尋，並依 `received_time` 做一次全域排序後才套用 `limit`；某個子資料夾讀取失敗會被跳過，不影響其他資料夾的結果。
+
 ### `find_latest(query: MailQuery) -> MailMessage | None`
 
 回傳最新一封符合條件的信件；找不到時回傳 `None`（不會拋例外）。
@@ -153,6 +155,32 @@ package 內部只呼叫 `logging.getLogger(__name__)`，不會呼叫 `logging.ba
 - `DEBUG`：查詢摘要、Restrict filter 內容、搜尋命中數、Exchange sender SMTP fallback。
 - `INFO`：附件成功下載、附件因同名檔衝突被 skip。
 
+## 開發者：在真機 Outlook 上跑 opt-in smoke test
+
+`tests/integration/test_outlook_smoke.py` 預設不會執行（CI 沒有 Outlook，也不該用到），只有在設定好 Classic Outlook Desktop 的 Windows 11 電腦上手動開啟：
+
+```powershell
+$env:RUN_OUTLOOK_INTEGRATION = "1"
+uv run pytest tests/integration/test_outlook_smoke.py -v -s
+```
+
+沒有近 24 小時內的信件時，`test_can_search_recent_inbox_mail` 仍會 PASS（回傳空 list 是合法結果）。
+
+要驗證 `find_latest()` 能找到指定的測試信件、並看到 subject／sender／附件檔名，先指向一個專門的測試資料夾：
+
+```powershell
+$env:OUTLOOK_TEST_FOLDER = "收件匣/測試"
+$env:OUTLOOK_TEST_SUBJECT_CONTAINS = "smoke test"
+```
+
+要再驗證附件真的能下載到暫存資料夾（不會刪除或搬動原始信件），才額外設定：
+
+```powershell
+$env:RUN_OUTLOOK_DOWNLOAD_INTEGRATION = "1"
+```
+
+**繁中 Windows 的 `ReceivedTime` locale 驗證**：用 Outlook UI 上已知一封 24 小時內的信件交叉確認 `search()` 能找到；再把 `received_after` 移到該信件之後，確認找不到。若第一項失敗，只需要修改 `filters.py` 的 `format_outlook_datetime()` 這一個函式，不影響 public API。
+
 ## v1 範圍之外
 
-不支援：遞迴搜尋所有子資料夾、寫信／回信／搬移／刪除／標記已讀、本文搜尋、收件者／CC／分類／重要性條件、YAML／JSON 設定驅動下載、CLI、Microsoft Graph／IMAP／macOS backend、跨 mailbox 的頂層 store 選擇、下載紀錄資料庫與排程功能。
+不支援：寫信／回信／搬移／刪除／標記已讀、本文搜尋、收件者／CC／分類／重要性條件、YAML／JSON 設定驅動下載、CLI、Microsoft Graph／IMAP／macOS backend、跨 mailbox 的頂層 store 選擇、下載紀錄資料庫與排程功能。
