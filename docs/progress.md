@@ -12,7 +12,7 @@
 - [x] Task 8: 實作附件下載與 `download_latest()`（`client.py` 的 `download_attachments`／`download_latest`，已合併至 main）
 - [x] Task 9: 穩定 public exports、logging 與使用文件（分支 `feature/task9_public-api`，commit `3450914`）
 - [x] Task 12: 支援遞迴搜尋子資料夾（commit `bbb01d0`，PR #2 已合併至 main `696cf9f`）
-- [ ] Task 10: 在真實 Windows Outlook 執行 opt-in smoke test
+- [x] Task 10: 在真實 Windows Outlook 執行 opt-in smoke test（commit `d4cd806`，分支 `feature/task10_smoke-test`，尚未合併至 main）
 - [ ] Task 11: 完整驗證、建立 wheel 與跨專案試裝
 
 > Task 12 是後來才追加進 `docs/email-downloader-PLAN.md` 的新任務（原計畫的 Task 10/11 之前），所以編號沒有照順序放，這裡維持文件裡的實際 Task 編號。
@@ -118,3 +118,26 @@
 - `uv run mypy src`：Success（9 source files）
 - `uv run mypy tests`：Success（8 source files）
 - Commit：`bbb01d0 0926 feat: support recursive subfolder search`（PR #2，`feature/task12_recursive-folder-search` → `main` `696cf9f`），working tree 乾淨
+
+## Task 10 完成內容（commit `d4cd806`，分支 `feature/task10_smoke-test`）
+
+- 新增 `tests/integration/test_outlook_smoke.py`：兩個 opt-in 測試，預設用 `pytest.mark.skipif` 跳過（`RUN_OUTLOOK_INTEGRATION` 沒設成 `"1"` 就不會跑），CI（`ubuntu-latest`）不會設這個環境變數，自動跳過不受影響。
+  - `test_can_search_recent_inbox_mail`：搜近 24 小時內的信件，驗證 COM session、`resolve_folder`（預設 Inbox）、`Items.Restrict` 的整條路徑。
+  - `test_can_find_and_optionally_download_test_message`：`find_latest()` 找一封測試信（可用 `OUTLOOK_TEST_FOLDER`／`OUTLOOK_TEST_SUBJECT_CONTAINS` 指定專用測試資料夾）、印出 subject／sender／附件檔名；再額外設 `RUN_OUTLOOK_DOWNLOAD_INTEGRATION=1` 才會呼叫 `download_attachments()` 存到 `tmp_path`，不會動到原始信件。
+- `pyproject.toml` 的 `ruff.lint.ignore` 加上 `DTZ005`（`datetime.now()` 沒帶 tz），理由跟先前已忽略的 `DTZ001` 一樣：這個 package 設計上就是要用 naive 本機時間。
+- **README** 補上「開發者：在真機 Outlook 上跑 opt-in smoke test」段落，並在 `search()` 說明加一句 `MailQuery.recursive` 的介紹；同時修正「v1 範圍之外」清單裡過期的「不支援遞迴搜尋所有子資料夾」（Task 12 已經支援了）。
+
+### 真機驗證結果（2026-09-26，Windows 11 + Classic Outlook Desktop）
+
+- `RUN_OUTLOOK_INTEGRATION=1` 下兩個測試都 PASS，包含 `RUN_OUTLOOK_DOWNLOAD_INTEGRATION=1` 之後的實際附件下載也成功（找到一封收件匣裡的真實業務信件並下載了它的附件到暫存資料夾）。
+- 這代表 `filters.py` 的 `format_outlook_datetime()`（`MM/DD/YYYY hh:mm AM/PM`）在這台機器的 Outlook locale 下可以被正確解析，Task 4 code review 記錄的「地區設定風險」在這台機器上已驗證無虞。
+- Step 3（用 Outlook UI 已知信件交叉比對 `received_after` 篩選語意）：待確認是否已手動執行。
+
+### 最後驗證狀態（2026-09-26，Task 10 完成）
+
+- `uv run pytest tests/ -v`：72 passed（純邏輯測試，不含 opt-in 真機測試）
+- `RUN_OUTLOOK_INTEGRATION=1 RUN_OUTLOOK_DOWNLOAD_INTEGRATION=1 uv run pytest tests/integration/ -v -s`：2 passed（真機）
+- `uv run ruff check .`：All checks passed
+- `uv run mypy tests`：Success
+- Commit：`d4cd806 0926 test: add opt-in outlook smoke coverage`（分支 `feature/task10_smoke-test`）
+- 待 commit：`README.md`、`docs/progress.md` 的說明更新（尚未加進上面那個 commit）
