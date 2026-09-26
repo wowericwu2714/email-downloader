@@ -1,6 +1,7 @@
 import logging
 import os
 from pathlib import Path
+from typing import Any
 
 from email_downloader.attachments import (
     resolve_destination,
@@ -21,11 +22,51 @@ from email_downloader.filters import (
     build_restrict_filter,
     message_matches,
 )
-from email_downloader.folders import resolve_folder
+from email_downloader.folders import iter_folder_tree, resolve_folder
 from email_downloader.models import ConflictPolicy, MailMessage, MailQuery
 from email_downloader.protocols import ComSessionFactory
 
 logger = logging.getLogger(__name__)
+
+
+
+def _search_folder(
+    folder: Any,
+    query: MailQuery,
+    *,
+    limit: int | None,
+) -> list[MailMessage]:
+    """Search a single Outlook folder's Items collection (no subfolder recursion)."""
+    results: list[MailMessage] = []
+
+    items = folder.Items
+    restrict_filter = build_restrict_filter(query)
+
+    if restrict_filter is not None:
+        logger.debug("Applying restrict filter: %s", restrict_filter)
+        items = items.Restrict(restrict_filter)
+
+    items.Sort("[ReceivedTime]", True)
+
+    for item in items:
+        if getattr(item, "Class", None) != 43:  # 43 corresponds to MailItem
+            continue
+
+        try:
+            message = mail_item_to_message(item, folder.StoreID)
+        except Exception:  # noqa: BLE001, S112 -- skip unreadable item; logging deferred to a later task.
+            continue
+
+        if not message_matches(message, query):
+            continue
+
+        results.append(message)
+
+        if limit is not None and len(results) >= limit:
+            break
+
+    return results
+
 
 class OutlookClient:
     """High-level Outlook mail search client."""
@@ -59,44 +100,33 @@ class OutlookClient:
             raise ValueError("limit must be at least 1")
 
         logger.debug(
-            "Searching Outlook mail: folder=%r, limit=%r",
+            "Searching Outlook mail: folder=%r, limit=%r, recursive=%r",
             query.folder,
             limit,
+            query.recursive,
         )
 
-        results: list[MailMessage] = []
 
         with self._session_factory.session() as namespace:
-            folder = resolve_folder(namespace, query.folder)
-            items = folder.Items
+            root_folder = resolve_folder(namespace, query.folder)
 
-            restrict_filter = build_restrict_filter(query)
+            if not query.recursive:
+                results = _search_folder(root_folder, query, limit=limit)
+            else:
+                results = []
+                for folder in iter_folder_tree(root_folder):
+                    try:
+                        results.extend(_search_folder(folder, query, limit=None))
+                    except Exception:   # noqa: BLE001 -- skip unreadable subfolder; logging deferred to a later task.
+                        logger.warning(
+                            "Skipping unreadable Outlook subfolder while searching recursively"
+                        )
+                        continue
+                results.sort(key=lambda message: message.received_time, reverse=True)
 
-            if restrict_filter is not None:
-                logger.debug("Applying restrict filter: %s", restrict_filter)
-                items = items.Restrict(restrict_filter)
+                if limit is not None:
+                    results = results[:limit]
 
-            items.Sort("[ReceivedTime]", True)
-
-            for item in items:
-                if getattr(item, "Class", None) != 43:  # 43 corresponds to MailItem
-                    continue
-
-                try:
-                    message = mail_item_to_message(
-                        item,
-                        folder.StoreID,
-                    )
-                except Exception:  # noqa: BLE001, S112 -- skip unreadable item; logging deferred to a later task.
-                    continue
-
-                if not message_matches(message, query):
-                    continue
-
-                results.append(message)
-
-                if limit is not None and len(results) >= limit:
-                    break
 
         logger.debug(
             "Outlook search matched %d message(s)",
