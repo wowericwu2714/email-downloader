@@ -19,10 +19,60 @@ def test_builds_received_and_boolean_filter() -> None:
     result = build_restrict_filter(query)
 
     assert result is not None
-    assert "[ReceivedTime] >= '09/20/2026 08:30 AM'" in result
-    assert "[ReceivedTime] <= '09/21/2026 06:00 PM'" in result
-    assert "[HasAttachment] = True" in result
-    assert "[UnRead] = True" in result
+    assert result.startswith("@SQL=(")
+    assert result.endswith(")")
+    assert "urn:schemas:httpmail:datereceived >= '09/20/2026 08:30 AM'" in result
+    assert "urn:schemas:httpmail:datereceived <= '09/21/2026 06:00 PM'" in result
+    assert "urn:schemas:httpmail:hasattachment = true" in result
+    assert "urn:schemas:httpmail:read = false" in result
+
+
+def test_restrict_filter_uses_equality_for_exact_sender() -> None:
+    query = MailQuery(sender="warehouse@example.com")
+
+    result = build_restrict_filter(query)
+
+    assert result == "@SQL=(urn:schemas:httpmail:fromemail = 'warehouse@example.com')"
+
+
+def test_restrict_filter_uses_like_for_sender_contains() -> None:
+    query = MailQuery(sender_contains="warehouse")
+
+    result = build_restrict_filter(query)
+
+    assert result == "@SQL=(urn:schemas:httpmail:fromemail LIKE '%warehouse%')"
+
+
+def test_restrict_filter_uses_equality_for_exact_subject() -> None:
+    query = MailQuery(subject="Daily Inventory Report")
+
+    result = build_restrict_filter(query)
+
+    assert result == "@SQL=(urn:schemas:httpmail:subject = 'Daily Inventory Report')"
+
+
+def test_restrict_filter_uses_like_for_subject_contains() -> None:
+    query = MailQuery(subject_contains="Inventory")
+
+    result = build_restrict_filter(query)
+
+    assert result == "@SQL=(urn:schemas:httpmail:subject LIKE '%Inventory%')"
+
+
+def test_restrict_filter_escapes_single_quotes_in_sender_contains() -> None:
+    query = MailQuery(sender_contains="o'hara")
+
+    result = build_restrict_filter(query)
+
+    assert result == "@SQL=(urn:schemas:httpmail:fromemail LIKE '%o''hara%')"
+
+
+def test_restrict_filter_has_attachment_false_uses_false_literal() -> None:
+    query = MailQuery(has_attachment=False)
+
+    result = build_restrict_filter(query)
+
+    assert result == "@SQL=(urn:schemas:httpmail:hasattachment = false)"
 
 
 def make_message(
