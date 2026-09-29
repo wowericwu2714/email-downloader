@@ -8,25 +8,48 @@ def format_outlook_datetime(value: datetime) -> str:
     return value.strftime("%m/%d/%Y %I:%M %p")
 
 
+def _escape_dasl_literal(value: str) -> str:
+    """Escape a string literal for use inside a DASL Restrict clause."""
+    return value.replace("'", "''")
+
+
 def build_restrict_filter(query: MailQuery) -> str | None:
-    """Build an Outlook Items.Restrict filter from a mail query."""
+    """Build a DASL Outlook Items.Restrict filter from a mail query."""
     clauses: list[str] = []
 
     if query.received_after is not None:
         value = format_outlook_datetime(query.received_after)
-        clauses.append(f"[ReceivedTime] >= '{value}'")
+        clauses.append(f"urn:schemas:httpmail:datereceived >= '{value}'")
 
     if query.received_before is not None:
         value = format_outlook_datetime(query.received_before)
-        clauses.append(f"[ReceivedTime] <= '{value}'")
+        clauses.append(f"urn:schemas:httpmail:datereceived <= '{value}'")
 
     if query.has_attachment is not None:
-        clauses.append(f"[HasAttachment] = {query.has_attachment}")
+        flag = "true" if query.has_attachment else "false"
+        clauses.append(f"urn:schemas:httpmail:hasattachment = {flag}")
 
     if query.unread_only:
-        clauses.append("[UnRead] = True")
+        clauses.append("urn:schemas:httpmail:read = false")
 
-    return " AND ".join(clauses) or None
+    if query.sender is not None:
+        value = _escape_dasl_literal(query.sender)
+        clauses.append(f"urn:schemas:httpmail:fromemail = '{value}'")
+    elif query.sender_contains is not None:
+        value = _escape_dasl_literal(query.sender_contains)
+        clauses.append(f"urn:schemas:httpmail:fromemail LIKE '%{value}%'")
+
+    if query.subject is not None:
+        value = _escape_dasl_literal(query.subject)
+        clauses.append(f"urn:schemas:httpmail:subject = '{value}'")
+    elif query.subject_contains is not None:
+        value = _escape_dasl_literal(query.subject_contains)
+        clauses.append(f"urn:schemas:httpmail:subject LIKE '%{value}%'")
+
+    if not clauses:
+        return None
+
+    return "@SQL=(" + " AND ".join(clauses) + ")"
 
 
 def attachment_matches(

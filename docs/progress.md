@@ -174,3 +174,45 @@
 - `uv build` + `uvx twine check dist\*`：wheel／sdist 都 PASSED
 - 獨立 consumer project 試裝：import 成功
 - 待 commit 檔案：`tests/units/test_filters.py`（新增 8 個測試）、以及 `ruff format .` 重排版的 19 個檔案
+
+## Task 11 Step 5 期間發現的效能問題與修正：`build_restrict_filter()` 改用 DASL（2026-09-29）
+
+**背景**：在 `D:\Code\test_email`（用 `uv add --editable` 裝 `email-downloader`）做 Task 11 Step 5 的真實情境測試——搜尋「憶鼎」兩個寄件者（`yidin2026@gmail.com`、`yidin2028@gmail.com`）9/1 至今、主旨含「庫存表」、附件含「庫存回饋表」、`.xlsx` 的庫存表信件，`folder="收件匣"` 加 `recursive=True`。
+
+**發現的問題**：兩個寄件者各自 `search()` 花了 100.48s／147.21s，合計快 4 分鐘。
+
+**除錯過程**：懷疑過是 `items.Sort()` 排序整個信件匣造成的（使用者提出的假設），寫了 `diagnose_search.py` 把 `_search_folder()` 拆成「拿 `Items`」「`Restrict()`」「`Sort()`」「逐筆轉換＋比對」四個階段分開計時，逐一資料夾量測，結果推翻了 Sort 假設：
+
+| 資料夾 | Restrict 後筆數 | 轉換筆數 | 符合筆數 | 花費時間 |
+|---|---|---|---|---|
+| 收件匣（根目錄） | 1361 | 1306 | 0 | 36.13s |
+| MSS System | 2501 | 2501 | 0 | 34.48s |
+| MSS | 152 | 151 | 0 | 24.04s |
+| 統昶 | 172 | 172 | 0 | 6.58s |
+| 憶鼎（真正的資料夾） | 50 | 50 | 14 | 0.71s |
+
+`get_items`／`Restrict`／`Sort` 三階段每個資料夾都是 0.00~0.01s，100% 的時間都花在最後「逐筆轉換＋比對」。**根本原因**：`build_restrict_filter()` 當時只把 `ReceivedTime`／`HasAttachment`／`UnRead` 推給 Outlook 端的 `Items.Restrict()`，`sender`／`subject` 完全沒有被推下去，導致每個資料夾裡「日期範圍內但跟憶鼎無關」的信，都要完整轉換成 `MailMessage`（`EntryID`／`Subject`／`SenderEmailAddress`／附件清單...每個屬性一次 COM round-trip）之後，才能在 Python 端的 `message_matches()` 被刷掉——白白轉換了近 4000 封無關信件。
+
+**修正方案**：把 `build_restrict_filter()` 整個改寫成 DASL（`@SQL=(...)`）語法，`sender`／`sender_contains`／`subject`／`subject_contains` 也推給 Outlook 端（`urn:schemas:httpmail:fromemail`／`urn:schemas:httpmail:subject`，exact 用 `=`、contains 用 `LIKE '%...%'`）。
+
+- Outlook 的 `Items.Restrict()` 一次呼叫裡，`@SQL=` DASL 語法跟原本 `[PropertyName] = value` 方括號語法**不能混用**，所以是整個函式改寫，不是加在旁邊。
+- 新增 `_escape_dasl_literal()` 處理字串裡的單引號（`'` → `''`）。
+- 附件相關條件（`attachment_name`／`attachment_name_contains`／`attachment_extensions`）**維持 Python 端過濾**：`Items.Restrict()` 只能篩 `MailItem` 本身的屬性，碰不到附件子集合，DASL 也一樣做不到。
+- `message_matches()`／`attachment_matches()` **完全沒改**，繼續在 Python 端把每封通過 Outlook 端篩選的信再驗證一次，當作正確性防線——即使 DASL `LIKE` 的大小寫或萬用字元行為跟預期有落差，也不會讓錯誤的信被誤判成符合，純粹是效能優化、不改變任何行為保證。`MailQuery` 的公開 API 完全沒變。
+
+**真機驗證結果（2026-09-29）**：改完之後在 `test_email` 重跑同一組查詢，兩個寄件者合計從 ~250 秒降到 **0.63s + 0.39s ≈ 1 秒**，結果正確——原本的 19 封都還在，多了當天（2026-09-29）新收到的 1 封（合理的新資料，不是 bug），共 20 封。
+
+**已知殘留風險（尚未真機驗證，類比 Task 4 的 `format_outlook_datetime` locale 風險，先實作、之後真機驗證、不行再調整）**：
+
+- `has_attachment`／`unread_only` 這兩個 DASL 布林值子句（`hasattachment = true/false`、`read = false`）這次真機測試沒有實際觸發到，只有 sender/subject/date 被驗證過。
+- DASL `LIKE` 用 `%`／`_` 當萬用字元，目前 `_escape_dasl_literal()` 只跳脫單引號，沒有跳脫這兩個字元；如果 sender/subject 內容剛好包含它們，比對行為可能不如預期（機率極低的邊界情況，暫不處理）。
+
+**TDD 執行紀錄**：`test_builds_received_and_boolean_filter` 舊斷言（方括號格式）已更新成 DASL 格式；新增 6 個測試涵蓋 exact sender／sender LIKE／exact subject／subject LIKE／單引號跳脫／`has_attachment=False`。
+
+### 最後驗證狀態（2026-09-29，DASL 改寫完成，尚未 commit）
+
+- `uv run pytest -m "not outlook_integration" --cov=email_downloader --cov-report=term-missing`：86 passed，`filters.py` 100% coverage，整體 coverage 97%
+- `uv run ruff format --check .` / `ruff check .`：All checks passed
+- `uv run mypy src` / `mypy tests`：Success（9 source files）
+- 真機驗證（`D:\Code\test_email`，Windows 11 + Classic Outlook Desktop）：搜尋耗時從 ~250s 降到 ~1s，結果正確
+- 待 commit：`src/email_downloader/filters.py`、`tests/units/test_filters.py`
